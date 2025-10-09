@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"type": "shell",
+	"cwd": "${workspaceFolder}",
+	"tasks": [
+		{
+			"type": "go",
+			"label": "go: build workspace",
+			"command": "build",
+			"args": [
+				"appcli.go"
+			],
+			"problemMatcher": [
+				"$go"
+			],
+			"group": "build",
+			"detail": "${workspacefolder}; go build appcli.go"
+		},
+		{
+			"label": "run",
+			"args": ["run","--add", "\"The quick brown fox jumped over the lazy dog \""],
+			"group": "build"
+		}
+	]
+}
