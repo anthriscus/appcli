@@ -9,14 +9,16 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${file}"
+            "program": "${file}",            
+            "args": ["-start","6"]
         },
         {
             "name": "Launch file run",
             "type": "go",
             "request": "launch",
             "mode": "exec",
-            "program": "${file}", "args": ["--add \"The Quick Brown fox Jumps\""]
+            "program": "${file}", 
+            "args": ["-add", "\"Lorem ipsum dolor sit amet, consectetur adipiscing elit\""]
         }
     ]
 }

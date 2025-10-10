@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
+	dataStorageFolder  string      = "appcli"
 	dataFileName       string      = "todolist.json"
 	openmode           int         = os.O_RDWR | os.O_CREATE
 	opentruncatemode   int         = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
@@ -29,6 +30,8 @@ type TodoListItem struct {
 	Id          string `json:"id"`
 }
 
+type TodoListItems map[int]TodoListItem
+
 // "not started", "started", or "completed", "other etc"
 // set them up as consts
 const (
@@ -37,108 +40,94 @@ const (
 	StateCompleted
 )
 
-// enum string them
+// enum equivalent string of status
 var statusName = map[int]string{
-	StateNotStarted: "not started",
-	StateStarted:    "started",
-	StateCompleted:  "completed",
+	StateNotStarted: "Not started",
+	StateStarted:    "Started",
+	StateCompleted:  "Completed",
 }
 
 func main() {
-	// not sure about var naming for flags here..
-	var flagTaskStatus = flag.Int("status", 0, "set the task status")
-	var flagAdd = flag.String("add", "", "add to todolist item")
-	var flagUpdate = flag.Int("update", -1, "update to todolist item")
-	var flagDelete = flag.Int("delete", -1, "delete item in todolist item")
-	var flagList = flag.Int("list", -1, "List items in to todolist item (0 for all)")
-	// var flagTask = flag.String("name", "", "task name")
+	// input flags
+	var flagAdd = flag.String("add", "", "add todolist item")
+	var flagUpdate = flag.String("update", "", "update task item id description")
+	var flagNotStart = flag.Bool("notstart", false, "not start a task item id number (not started)")
+	var flagStart = flag.Bool("start", false, "start a task item id number (starte)")
+	var flagComplete = flag.Bool("complete", false, "complete a task item id number (completed)")
+	var flagDelete = flag.Int("delete", -1, "delete a task item id number")
+	var flagList = flag.Bool("list", false, "list items in the todolist item")
 
-	// scratch debug info
-	fmt.Printf("program arguments length: %d\n", len(os.Args))
-	fmt.Printf("program arguments: %s", os.Args)
-	fmt.Printf("\n")
-	fmt.Printf("lastArgument is: %s\n", lastArgument(os.Args))
-	fmt.Printf("appname is %s\n", appName())
-
-	// for loop understanding
-	fmt.Println("")
-	if len(os.Args) > 1 {
-		for index := range len(os.Args[1:]) {
-			fmt.Printf("arguments item: %s\n", os.Args[index+1])
-		}
-	}
-
-	// our global list
-	todoList := []TodoListItem{}
-
-	// file resolver stuff for filer.go ?
+	// resolver the data folder
 	storageDir, storageErr := storagePath()
-	if storageErr == nil {
-		fmt.Printf("Storage path:  %s\n", storageDir)
-	} else {
+	if storageErr != nil {
 		fmt.Printf("Storage path check failed:  %s\n", storageErr)
+		return
 	}
-
 	storageFile := fmt.Sprintf("%s\\%s", storageDir, dataFileName)
-	fmt.Printf("Will be saving data to:  %s\n", storageFile)
-	// end file resolver
 
-	// pickup current list before process command
-	todoList = restore(storageFile)
+	// init / pickup current list before process command
+	todoList := restore(storageFile)
 
-	fmt.Printf("BeforeActions: Items in todoList: %d\n", len(todoList))
-	fmt.Println(todoList)
-	fmt.Println(strings.Repeat("*", 25))
-
-	// grab the flag input state from command line
+	// // grab the flag input state from command line
 	flag.Parse()
 
-	fmt.Printf("Status is: %d\n", *flagTaskStatus)
-	if *flagTaskStatus > -1 {
-		fmt.Printf("Status flag is: %d\n", *flagTaskStatus)
-		fmt.Printf("status const is %d\n", StateStarted)
-		fmt.Printf("status string is %s\n", statusName[StateStarted])
-		fmt.Println(statusName)
-		fmt.Printf("statusName length: %d\n", len(statusName))
-		var flag = *flagTaskStatus
-		checkStatus(flag)
-	}
-
+	// process the flags
 	if *flagAdd != "" {
-		fmt.Printf("%s\n", "wanting to add a todo item")
-		fmt.Printf("[%s]\n", *flagAdd)
-		item := newTodoListItem(*flagAdd, StateNotStarted, len(todoList)+1)
-		todoList = append(todoList, *item)
+		itemKeys := collectKeys(todoList)
+		nextKey := highestKey(itemKeys) + 1
+		item := newTodoListItem(*flagAdd, StateNotStarted, nextKey)
+		todoList[nextKey] = *item
 	}
-
-	if *flagUpdate != -1 {
-		// todo
+	if *flagUpdate != "" {
+		index := argumentsFlagIndex(true, os.Args)
+		descriptionChange(todoList, index, *flagUpdate)
+	}
+	if *flagNotStart {
+		index := argumentsFlagIndex(*flagNotStart, os.Args)
+		stateChange(todoList, index, StateNotStarted)
+		listTask(todoList, index)
+	}
+	if *flagStart {
+		index := argumentsFlagIndex(*flagStart, os.Args)
+		stateChange(todoList, index, StateStarted)
+		listTask(todoList, index)
+	}
+	if *flagComplete {
+		index := argumentsFlagIndex(*flagComplete, os.Args)
+		stateChange(todoList, index, StateCompleted)
+		listTask(todoList, index)
 	}
 	if *flagDelete != -1 {
 		fmt.Printf("FlagDelete [%d]\n", *flagDelete)
-		todoList = deleteTask(todoList, *flagDelete)
+		deleteTask(todoList, *flagDelete)
 		listTask(todoList, -1)
 	}
-	if *flagList > -1 {
-		fmt.Printf("FlagList [%d]\n", *flagList)
-		listTask(todoList, *flagList)
+	if *flagList {
+		fmt.Printf("FlagList [%t]\n", *flagList)
+		index := argumentsFlagIndex(*flagList, os.Args)
+		listTask(todoList, index)
 	}
 
-	// write to the file
+	// // write back to the file
 	saveList := []byte(stringifyList(todoList))
 	save(storageFile, saveList)
 }
 
-func appName() string {
-	return strings.Split(filepath.Base(os.Args[0]), ".")[0]
+// find the command line taskitem number
+func argumentsFlagIndex(flag bool, args []string) int {
+	if flag && len(args) >= 3 {
+		index, err := strconv.Atoi(args[len(args)-1])
+		if err == nil {
+			return index
+		}
+	}
+	return 0
 }
 
-func checkStatus(status int) {
-	if status >= 0 && status <= len(statusName) {
-		fmt.Printf("Status is: %s\n", statusName[status])
-	} else {
-		panic(fmt.Errorf("unknown state: %d", status))
-	}
+// for sub folder
+func appName() string {
+	// return strings.Split(filepath.Base(os.Args[0]), ".")[0] // found problem with debugger renaming exe name!
+	return dataStorageFolder
 }
 
 func storagePath() (string, error) {
@@ -157,20 +146,7 @@ func createDataFile(fileName string, mode int) (*os.File, error) {
 	return fi, err
 }
 
-func stringifyList(list []TodoListItem) string {
-	// back as byte
-	data, _ := json.Marshal(list)
-	// then string it
-	return string(data)
-}
-
-func lastArgument(args []string) string {
-	if len(args) > 1 {
-		return args[len(args)-1]
-	}
-	return ""
-}
-
+// todolist item constructor
 func newTodoListItem(description string, state int, line int) *TodoListItem {
 	item := TodoListItem{
 		Id:          generateId(),
@@ -182,6 +158,14 @@ func newTodoListItem(description string, state int, line int) *TodoListItem {
 	return &item
 }
 
+func stringifyList(list TodoListItems) string {
+	// back as byte
+	data, _ := json.Marshal(list)
+	// then string it
+	return string(data)
+}
+
+// save list back to json
 func save(storageFile string, data []byte) {
 	destination, err := createDataFile(storageFile, opentruncatemode)
 	if destination != nil {
@@ -197,30 +181,31 @@ func saveData(w io.Writer, data []byte) int {
 	return bytes
 }
 
-func restore(storageFile string) []TodoListItem {
+// restore from json
+func restore(storageFile string) TodoListItems {
 	destination, err := createDataFile(storageFile, openmode)
 	if destination != nil {
 		defer destination.Close()
 	}
 	if err != nil {
-		return []TodoListItem{}
+		return TodoListItems{}
 	}
 	return restoreList(destination)
 }
 
-func restoreList(destination io.Reader) []TodoListItem {
+func restoreList(destination io.Reader) TodoListItems {
 	restored := restoreData(destination)
 	if len(restored) == 0 {
 		fmt.Printf("returning empty list restored empty")
-		return []TodoListItem{}
+		return TodoListItems{}
 	}
 	data := []byte(string(restored))
-	restoredList := []TodoListItem{}
+	restoredList := TodoListItems{}
 	jsonError := json.Unmarshal(data, &restoredList)
 	if jsonError != nil {
 		fmt.Println(jsonError)
 		fmt.Printf("returning empty list json error")
-		return []TodoListItem{}
+		return TodoListItems{}
 	}
 	return restoredList
 }
@@ -230,36 +215,92 @@ func restoreData(r io.Reader) []byte {
 	return restored
 }
 
-// could use other choices of id layout/format here. guid etc for safer uniqueness?
+// more unique (ish) id perhaps
 func generateId() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-// user friendly date for reports etc
+// date string for task item
 func generatedFriendlyDate() string {
 	t := time.Now().UTC()
 	return fmt.Sprintf("%s", t.Format(friendlyDateFormat))
 }
 
-func listTask(l []TodoListItem, index int) {
-	fmt.Printf("%s Todo List items %s\n", strings.Repeat("*", 3), strings.Repeat("*", 3))
-	if len(l) > 0 {
-		if index > 0 && index <= len(l)+1 {
-			fmt.Printf("%+v\n", l[index-1])
+// task list report
+func listTask(list TodoListItems, index int) {
+	fmt.Printf("List length:%d\n", len(list))
+
+	listTaskHeader()
+	if len(list) > 0 {
+		if record, ok := list[index]; ok {
+			listTaskLine(record)
 		} else {
-			for i := range len(l) {
-				fmt.Printf("%+v\n", l[i])
+			itemKeys := collectKeys(list)
+			slices.Sort(itemKeys)
+			for _, i := range itemKeys {
+				listTaskLine(list[i])
 			}
 		}
 	}
 }
 
-func deleteTask(l []TodoListItem, index int) []TodoListItem {
-	if len(l) > 0 {
-		if index > 0 && index <= len(l) {
-			fmt.Printf("%s Deleting item %d %s\n", strings.Repeat("*", 3), index, strings.Repeat("*", 3))
-			l = slices.Delete(l, index-1, index)
+func listTaskHeader() {
+	fmt.Printf("%s\t%s\t\t%s\n", "ID", "Status", "Description")
+	fmt.Printf("%s\t%s\t%s\n", strings.Repeat("-", 1), strings.Repeat("-", 12), strings.Repeat("-", 120))
+}
+
+func listTaskLine(listItem TodoListItem) {
+	fmt.Printf("%d\t%s\t%s\n", listItem.Line, statusName[listItem.State], listItem.Description)
+}
+
+// delete a task
+func deleteTask(list TodoListItems, index int) {
+	if len(list) > 0 {
+		if _, ok := list[index]; ok {
+			fmt.Printf("Deleting item: %d\n", index)
+			delete(list, index)
 		}
 	}
-	return l
+}
+
+// change the state
+func stateChange(list TodoListItems, index int, state int) {
+	if len(list) > 0 {
+		if record, ok := list[index]; ok {
+			fmt.Printf("Changing task %d state to : %s\n", index, statusName[state])
+			fmt.Printf("Current state: %s", statusName[list[index].State])
+			record.State = state
+			list[index] = record
+		}
+	}
+}
+
+func descriptionChange(list TodoListItems, index int, newDescription string) {
+	if len(list) > 0 {
+		if record, ok := list[index]; ok {
+			fmt.Printf("Changing task %d description to : %s\n", index, newDescription)
+			fmt.Printf("Current description: %s", list[index].Description)
+			record.Description = newDescription
+			list[index] = record
+		}
+	}
+}
+
+// fetch the number keys from the map
+func collectKeys(data TodoListItems) []int {
+	keys := make([]int, 0, len(data))
+	for i := range data {
+		keys = append(keys, i)
+	}
+	return keys
+}
+
+func highestKey(keys []int) int {
+	key := 1
+	for _, i := range keys {
+		if i > key {
+			key = i
+		}
+	}
+	return key
 }
