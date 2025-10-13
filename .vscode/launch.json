@@ -10,7 +10,9 @@
             "request": "launch",
             "mode": "debug",
             "program": ".",            
-            "args": ["-start","6"]
+            "args": ["-start","6"],
+            "env": {"APP_ENV": "development"
+            }
         },
         {
             "name": "Launch file run",

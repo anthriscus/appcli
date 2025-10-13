@@ -15,6 +15,8 @@ import (
 const (
 	dataStorageFolderName string      = "appcli"
 	dataFileName          string      = "todolist.json"
+	errorFileName         string      = "appcliError.log"
+	activityFileName      string      = "appcliActivity.log"
 	openFlag              int         = os.O_RDWR | os.O_CREATE
 	openTruncateFlag      int         = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	readwriteFileMode     os.FileMode = 0600
@@ -47,6 +49,9 @@ var statusName = map[int]string{
 	StateCompleted:  "Completed",
 }
 
+var errorLogger appLogger
+var activityLogger appLogger
+
 func main() {
 	// input flags
 	var flagAdd = flag.String("add", "", "add todolist item (\"description\")")
@@ -60,9 +65,23 @@ func main() {
 	// resolve the appdata data sub folder
 	dir := createAppDataFolder(dataStorageFolderName)
 	if len(dir) == 0 {
+		// don't have a file logger yet!
 		fmt.Printf("Error:%s", "Cannot establish working data folder")
 		return
 	}
+
+	// wire up loggers
+	errorLogName := dir + "\\" + errorFileName
+	errorFile := openLogFile(errorLogName)
+	defer errorFile.Close()
+	errorLogoptions := errorOptions()
+	errorLogger.log = setupLogger(errorFile, errorLogoptions)
+
+	activityLogName := dir + "\\" + activityFileName
+	activityFile := openLogFile(activityLogName)
+	defer activityFile.Close()
+	activityLogoptions := activityOptions()
+	activityLogger.log = setupLogger(activityFile, activityLogoptions)
 
 	// init / pickup current list before process command
 	storageFile := fmt.Sprintf("%s\\%s", dir, dataFileName)
@@ -74,10 +93,7 @@ func main() {
 	// process the flags
 	switch {
 	case *flagAdd != "":
-		itemKeys := collectKeys(todoList)
-		nextKey := highestKey(itemKeys) + 1
-		item := newTodoListItem(*flagAdd, StateNotStarted, nextKey)
-		todoList[nextKey] = *item
+		nextKey := addTask(todoList, *flagAdd)
 		listTask(todoList, nextKey)
 	case *flagUpdate != "":
 		index := argumentsFlagIndex(true, os.Args)
@@ -120,19 +136,6 @@ func argumentsFlagIndex(flag bool, args []string) int {
 	return 0
 }
 
-func createAppDataFolder(applicationName string) string {
-	dir, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	dir = dir + "\\" + applicationName
-	err = os.MkdirAll(dir, readwriteFileMode)
-	if err != nil {
-		return ""
-	}
-	return dir
-}
-
 // todolist item constructor
 func newTodoListItem(description string, state int, line int) *TodoListItem {
 	item := TodoListItem{
@@ -155,16 +158,23 @@ func stringifyList(list TodoListItems) string {
 // save list back to json
 func save(storageFile string, data []byte) {
 	destination, err := os.OpenFile(storageFile, openTruncateFlag, readwriteFileMode)
+	if err != nil || destination == nil {
+		errorLogger.log.Error("Error getting file to save", "err", err, "storageFile", storageFile)
+	}
 	if destination != nil {
 		defer destination.Close()
 	}
 	if err == nil {
 		saveData(destination, data)
+		activityLogger.log.Info("Saved data", "storageFile", storageFile)
 	}
 }
 
 func saveData(w io.Writer, data []byte) int {
-	bytes, _ := w.Write(data)
+	bytes, err := w.Write(data)
+	if err != nil {
+		errorLogger.log.Error("Error writing data to disk", "err", err)
+	}
 	return bytes
 }
 
@@ -192,6 +202,7 @@ func restoreList(destination io.Reader) TodoListItems {
 	if jsonError != nil {
 		fmt.Println(jsonError)
 		fmt.Printf("returning empty list json error")
+		errorLogger.log.Error("Error restoring list from json", "jsonErrorn", jsonError)
 		return TodoListItems{}
 	}
 	return restoredList
@@ -243,9 +254,11 @@ func listTaskLine(listItem TodoListItem) {
 // delete a task
 func deleteTask(list TodoListItems, index int) {
 	if len(list) > 0 {
-		if _, ok := list[index]; ok {
+		if record, ok := list[index]; ok {
 			fmt.Printf("Deleting item: %d\n", index)
+			before := record.Description
 			delete(list, index)
+			activityLogger.log.Info("Deleted item", "ID", index, "before", before)
 		}
 	}
 }
@@ -256,10 +269,22 @@ func stateChange(list TodoListItems, index int, state int) {
 		if record, ok := list[index]; ok {
 			fmt.Printf("Current state: %s", statusName[list[index].State])
 			fmt.Printf("Changing task %d state to : %s\n", index, statusName[state])
+			before := statusName[list[index].State]
+			after := statusName[state]
 			record.State = state
 			list[index] = record
+			activityLogger.log.Info("Updated item status", "ID", index, "before", before, "after", after)
 		}
 	}
+}
+
+func addTask(list TodoListItems, newItem string) int {
+	itemKeys := collectKeys(list)
+	nextKey := highestKey(itemKeys) + 1
+	item := newTodoListItem(newItem, StateNotStarted, nextKey)
+	list[nextKey] = *item
+	activityLogger.log.Info("Added item", "ID", nextKey, "descriptiont", newItem)
+	return nextKey
 }
 
 func descriptionChange(list TodoListItems, index int, newDescription string) {
@@ -267,8 +292,10 @@ func descriptionChange(list TodoListItems, index int, newDescription string) {
 		if record, ok := list[index]; ok {
 			fmt.Printf("Current description: %s", list[index].Description)
 			fmt.Printf("Changing task %d description to : %s\n", index, newDescription)
+			before := record.Description
 			record.Description = newDescription
 			list[index] = record
+			activityLogger.log.Info("Updated item description", "ID", index, "before", before, "after", newDescription)
 		}
 	}
 }
