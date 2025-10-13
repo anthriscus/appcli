@@ -12,10 +12,30 @@
         {
             "label": "run",
             "command": "go",
-            "args": ["run", "${file}"],
+            "args": ["run", "./..."],
             "group": "build",
             "type": "shell",
         },
+        {
+            "label": "run development env",
+            "command": "go",
+            "args": ["run", "./..."],
+            "group": "build",
+            "type": "shell",
+            "options": {
+                "env": {"APP_ENV": "development"}
+            }
+        },
+        {
+            "label": "run production env",
+            "command": "go",
+            "args": ["run", "./..."],
+            "group": "build",
+            "type": "shell",
+            "options": {
+                "env": {"APP_ENV": "production"}
+            }
+        },        
         {
             "label": "test",
             "command": "go",
