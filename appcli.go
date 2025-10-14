@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,16 +22,19 @@ const (
 	openFlag              int         = os.O_RDWR | os.O_CREATE
 	openTruncateFlag      int         = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	readwriteFileMode     os.FileMode = 0600
-	friendlyDateFormat    string      = time.RFC3339
+	traceIdKey            contextKey  = "TraceID"
 )
+
+// context key type
+type contextKey string
 
 // holds our item
 type TodoListItem struct {
-	Line        int    `json:"line"`
-	Description string `json:"description"`
-	State       int    `json:"state"`
-	Created     string `json:"created"` // friendly date
-	Id          string `json:"id"`
+	Line        int       `json:"line"` // tags just to show understinding of useage for flipping case in the file.
+	Description string    `json:"description"`
+	State       int       `json:"state"`
+	Created     time.Time `json:"created"` // friendly date
+	Id          string    `json:"id"`
 }
 
 type TodoListItems map[int]TodoListItem
@@ -55,16 +60,41 @@ var activityLogger appLogger
 func main() {
 	// input flags
 	var flagAdd = flag.String("add", "", "add todolist item (\"description\")")
-	var flagUpdate = flag.String("update", "", "update task item description (\"description\" id)")
-	var flagNotStart = flag.Bool("notstart", false, "set task item id number to not started ( id )")
-	var flagStart = flag.Bool("start", false, "start a task item ( id )")
-	var flagComplete = flag.Bool("complete", false, "complete a task item id ( id )")
-	var flagDelete = flag.Int("delete", -1, "delete a task item id number ( id )")
-	var flagList = flag.Bool("list", false, "list items in the todolist item ( id )")
+	var flagUpdate = flag.Int("update", 0, "update task item description (id -description \"new description\")")
+	var flagNotStart = flag.Int("notstart", 0, "set task item id number to not started ( id )")
+	var flagStart = flag.Int("start", 0, "start a task item ( id )")
+	var flagComplete = flag.Int("complete", 0, "complete a task item id ( id )")
+	var flagDelete = flag.Int("delete", 0, "delete a task item id number ( id )")
+	var flagList = flag.Bool("list", false, "list items in the todolist item ( with additional optional -taskid num to show one item)")
+
+	// additional flag required for description updates
+	var taskDescription string
+	flag.Func("description", "use this with -update for the update description text -description \"new text\"", func(s string) error {
+		if len(s) == 0 {
+			return errors.New("value of description needs to be supplied")
+		} else {
+			taskDescription = s
+		}
+		return nil
+	})
+	// additional flag for list filter
+	var taskId int
+	flag.Func("taskid", "optional, use this -taskid with -list for one task", func(s string) error {
+		if i, ok := strconv.Atoi(s); ok != nil {
+			return errors.New("value of taskid needs to be supplied")
+		} else {
+			taskId = i
+		}
+		return nil
+	})
+
+	// but TODO "github.com/google/uuid" will provide a better one
+	id := generateId()
+	ctx := context.WithValue(context.Background(), traceIdKey, id)
 
 	// resolve the appdata data sub folder
-	dir := createAppDataFolder(dataStorageFolderName)
-	if len(dir) == 0 {
+	dir, err := createAppDataFolder(dataStorageFolderName)
+	if err != nil {
 		// don't have a file logger yet!
 		fmt.Printf("Error:%s", "Cannot establish working data folder")
 		return
@@ -72,20 +102,21 @@ func main() {
 
 	// wire up loggers
 	errorLogName := dir + "\\" + errorFileName
-	errorFile := openLogFile(errorLogName)
-	defer errorFile.Close()
-	errorLogoptions := errorOptions()
-	errorLogger.log = setupLogger(errorFile, errorLogoptions)
-
+	if errorFile, err := openLogFile(errorLogName); err == nil {
+		defer errorFile.Close()
+		errorLogoptions := errorOptions()
+		errorLogger.log = setupLogger(errorFile, errorLogoptions)
+	}
 	activityLogName := dir + "\\" + activityFileName
-	activityFile := openLogFile(activityLogName)
-	defer activityFile.Close()
-	activityLogoptions := activityOptions()
-	activityLogger.log = setupLogger(activityFile, activityLogoptions)
+	if activityFile, err := openLogFile(activityLogName); err == nil {
+		defer activityFile.Close()
+		activityLogoptions := activityOptions()
+		activityLogger.log = setupLogger(activityFile, activityLogoptions)
+	}
 
 	// init / pickup current list before process command
 	storageFile := fmt.Sprintf("%s\\%s", dir, dataFileName)
-	todoList := restore(storageFile)
+	todoList, _ := restore(ctx, storageFile)
 
 	// // grab the flag input state from command line
 	flag.Parse()
@@ -93,135 +124,106 @@ func main() {
 	// process the flags
 	switch {
 	case *flagAdd != "":
-		nextKey := addTask(todoList, *flagAdd)
+		nextKey := addTask(ctx, todoList, *flagAdd)
 		listTask(todoList, nextKey)
-	case *flagUpdate != "":
-		index := argumentsFlagIndex(true, os.Args)
-		descriptionChange(todoList, index, *flagUpdate)
-		listTask(todoList, index)
-	case *flagNotStart:
-		index := argumentsFlagIndex(*flagNotStart, os.Args)
-		stateChange(todoList, index, StateNotStarted)
-		listTask(todoList, index)
-	case *flagStart:
-		index := argumentsFlagIndex(*flagStart, os.Args)
-		stateChange(todoList, index, StateStarted)
-		listTask(todoList, index)
-	case *flagComplete:
-		index := argumentsFlagIndex(*flagComplete, os.Args)
-		stateChange(todoList, index, StateCompleted)
-		listTask(todoList, index)
-	case *flagDelete != -1:
-		fmt.Printf("FlagDelete [%d]\n", *flagDelete)
-		deleteTask(todoList, *flagDelete)
+	case *flagUpdate > 0 && len(taskDescription) > 0:
+		descriptionChange(ctx, todoList, *flagUpdate, taskDescription)
+		listTask(todoList, *flagUpdate)
+	case *flagNotStart > 0:
+		stateChange(ctx, todoList, *flagNotStart, StateNotStarted)
+		listTask(todoList, *flagNotStart)
+	case *flagStart > 0:
+		stateChange(ctx, todoList, *flagStart, StateStarted)
+		listTask(todoList, *flagStart)
+	case *flagComplete > 0:
+		stateChange(ctx, todoList, *flagComplete, StateCompleted)
+		listTask(todoList, *flagComplete)
+	case *flagDelete > 0:
+		deleteTask(ctx, todoList, *flagDelete)
 		listTask(todoList, -1)
 	case *flagList:
-		index := argumentsFlagIndex(*flagList, os.Args)
-		listTask(todoList, index)
+		listTask(todoList, taskId)
 	}
 
-	// // write back to the file
-	saveList := []byte(stringifyList(todoList))
-	save(storageFile, saveList)
-}
-
-// find the command line taskitem number
-func argumentsFlagIndex(flag bool, args []string) int {
-	if flag && len(args) >= 3 {
-		index, err := strconv.Atoi(args[len(args)-1])
-		if err == nil {
-			return index
-		}
-	}
-	return 0
+	// write back to the file
+	save(ctx, storageFile, todoList)
 }
 
 // todolist item constructor
-func newTodoListItem(description string, state int, line int) *TodoListItem {
+func newTodoListItem(description string, state int, line int) TodoListItem {
 	item := TodoListItem{
 		Id:          generateId(),
 		Description: description,
 		State:       state,
-		Created:     generatedFriendlyDate(),
+		Created:     time.Now().UTC(),
 		Line:        line,
 	}
-	return &item
-}
-
-func stringifyList(list TodoListItems) string {
-	// back as byte
-	data, _ := json.Marshal(list)
-	// then string it
-	return string(data)
+	return item
 }
 
 // save list back to json
-func save(storageFile string, data []byte) {
-	destination, err := os.OpenFile(storageFile, openTruncateFlag, readwriteFileMode)
-	if err != nil || destination == nil {
-		errorLogger.log.Error("Error getting file to save", "err", err, "storageFile", storageFile)
-	}
-	if destination != nil {
-		defer destination.Close()
-	}
-	if err == nil {
-		saveData(destination, data)
-		activityLogger.log.Info("Saved data", "storageFile", storageFile)
-	}
-}
+func save(ctx context.Context, storageFile string, list TodoListItems) error {
 
-func saveData(w io.Writer, data []byte) int {
-	bytes, err := w.Write(data)
-	if err != nil {
-		errorLogger.log.Error("Error writing data to disk", "err", err)
+	if data, err := json.Marshal(list); err != nil {
+		errorLogger.log.ErrorContext(ctx, "Save failed converting todo list to json", "err", err)
+		return err
+	} else {
+		if destination, err := os.OpenFile(storageFile, openTruncateFlag, readwriteFileMode); err != nil {
+			errorLogger.log.ErrorContext(ctx, "Save failed getting file", "err", err, "storageFile", storageFile)
+			return err
+		} else {
+			defer destination.Close()
+			if _, err := destination.Write(data); err != nil {
+				errorLogger.log.ErrorContext(ctx, "Save to file failed ", "err", err, "storageFile", storageFile)
+				return err
+			}
+		}
 	}
-	return bytes
+	activityLogger.log.InfoContext(ctx, "Saved data", "storageFile", storageFile)
+	return nil
 }
 
 // restore from json
-func restore(storageFile string) TodoListItems {
+func restore(ctx context.Context, storageFile string) (TodoListItems, error) {
 	destination, err := os.OpenFile(storageFile, openFlag, readwriteFileMode)
 	if err != nil {
-		return TodoListItems{}
+		errorLogger.log.ErrorContext(ctx, "Error restoring list file", "err", err, "storageFile", storageFile)
+		return TodoListItems{}, err
 	}
 	if destination != nil {
 		defer destination.Close()
 	}
-	return restoreList(destination)
+	return restoreList(ctx, destination)
 }
 
-func restoreList(destination io.Reader) TodoListItems {
-	restored := restoreData(destination)
-	if len(restored) == 0 {
+func restoreList(ctx context.Context, destination io.Reader) (TodoListItems, error) {
+	if restored, err := io.ReadAll(destination); err != nil {
+		fmt.Println(err)
+		fmt.Printf("error restoring data")
+		errorLogger.log.ErrorContext(ctx, "Error restoring data", "err", err)
+		return TodoListItems{}, err
+	} else if len(restored) == 0 {
+		// not neccessarily an error
 		fmt.Printf("returning empty list restored empty")
-		return TodoListItems{}
+		return TodoListItems{}, nil
+	} else {
+		data := []byte(string(restored))
+		restoredList := TodoListItems{}
+		err := json.Unmarshal(data, &restoredList)
+		if err != nil {
+			fmt.Println(err)
+			fmt.Printf("returning empty list json error")
+			errorLogger.log.ErrorContext(ctx, "Error restoring list from json", "err", err)
+			return TodoListItems{}, nil
+		}
+		return restoredList, nil
 	}
-	data := []byte(string(restored))
-	restoredList := TodoListItems{}
-	jsonError := json.Unmarshal(data, &restoredList)
-	if jsonError != nil {
-		fmt.Println(jsonError)
-		fmt.Printf("returning empty list json error")
-		errorLogger.log.Error("Error restoring list from json", "jsonErrorn", jsonError)
-		return TodoListItems{}
-	}
-	return restoredList
-}
-
-func restoreData(r io.Reader) []byte {
-	var restored, _ = io.ReadAll(r)
-	return restored
 }
 
 // more unique (ish) id perhaps
+// todo consider using https://github.com/google/uuid
 func generateId() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-// date string for task item
-func generatedFriendlyDate() string {
-	t := time.Now().UTC()
-	return "%s" + t.Format(friendlyDateFormat)
 }
 
 // task list report
@@ -248,23 +250,23 @@ func listTaskHeader() {
 }
 
 func listTaskLine(listItem TodoListItem) {
-	fmt.Printf("%d\t%s\t%s\n", listItem.Line, statusName[listItem.State], listItem.Description)
+	fmt.Printf("%d\t%s\t%s\t[%s]\n", listItem.Line, statusName[listItem.State], listItem.Description, listItem.Created.Format(time.RFC822))
 }
 
 // delete a task
-func deleteTask(list TodoListItems, index int) {
+func deleteTask(ctx context.Context, list TodoListItems, index int) {
 	if len(list) > 0 {
 		if record, ok := list[index]; ok {
 			fmt.Printf("Deleting item: %d\n", index)
 			before := record.Description
 			delete(list, index)
-			activityLogger.log.Info("Deleted item", "ID", index, "before", before)
+			activityLogger.log.InfoContext(ctx, "Deleted item", "ID", index, "before", before)
 		}
 	}
 }
 
 // change the state
-func stateChange(list TodoListItems, index int, state int) {
+func stateChange(ctx context.Context, list TodoListItems, index int, state int) {
 	if len(list) > 0 {
 		if record, ok := list[index]; ok {
 			fmt.Printf("Current state: %s", statusName[list[index].State])
@@ -273,21 +275,21 @@ func stateChange(list TodoListItems, index int, state int) {
 			after := statusName[state]
 			record.State = state
 			list[index] = record
-			activityLogger.log.Info("Updated item status", "ID", index, "before", before, "after", after)
+			activityLogger.log.InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
 		}
 	}
 }
 
-func addTask(list TodoListItems, newItem string) int {
+func addTask(ctx context.Context, list TodoListItems, newItem string) int {
 	itemKeys := collectKeys(list)
 	nextKey := highestKey(itemKeys) + 1
 	item := newTodoListItem(newItem, StateNotStarted, nextKey)
-	list[nextKey] = *item
-	activityLogger.log.Info("Added item", "ID", nextKey, "descriptiont", newItem)
+	list[nextKey] = item
+	activityLogger.log.InfoContext(ctx, "Added item", "ID", nextKey, "descriptiont", newItem)
 	return nextKey
 }
 
-func descriptionChange(list TodoListItems, index int, newDescription string) {
+func descriptionChange(ctx context.Context, list TodoListItems, index int, newDescription string) {
 	if len(list) > 0 {
 		if record, ok := list[index]; ok {
 			fmt.Printf("Current description: %s", list[index].Description)
@@ -295,7 +297,7 @@ func descriptionChange(list TodoListItems, index int, newDescription string) {
 			before := record.Description
 			record.Description = newDescription
 			list[index] = record
-			activityLogger.log.Info("Updated item description", "ID", index, "before", before, "after", newDescription)
+			activityLogger.log.InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
 		}
 	}
 }

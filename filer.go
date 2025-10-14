@@ -6,26 +6,26 @@ import (
 	"os"
 )
 
-func createAppDataFolder(applicationName string) string {
+func createAppDataFolder(applicationName string) (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
-		return ""
+		return "", err
 	}
 	dir = dir + "\\" + applicationName
 	err = os.MkdirAll(dir, 0600)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return dir
+	return dir, nil
 }
 
-func openLogFile(fileName string) *os.File {
+func openLogFile(fileName string) (*os.File, error) {
 	fi, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		// log file not ready so default std.err logging here
-		slog.Error(fmt.Sprintf("%s\n", "Failed to open logfile for writing"))
+		slog.Error(fmt.Sprintf("%s\n", "Failed to create logfile for writing"))
 		slog.Error(err.Error())
-		return &os.File{}
+		return &os.File{}, err
 	}
-	return fi
+	return fi, nil
 }

@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "debug",
             "program": ".",            
-            "args": ["-start","6"],
+            "args": ["-start","6", "-add" ,"Foo\""],
             "env": {"APP_ENV": "development"
             }
         },
