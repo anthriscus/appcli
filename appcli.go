@@ -30,10 +30,10 @@ type contextKey string
 
 // holds our item
 type TodoListItem struct {
-	Line        int       `json:"line"` // tags just to show understinding of useage for flipping case in the file.
+	Line        int       `json:"line"` // tags just to show understanding of useage for flipping case in the file.
 	Description string    `json:"description"`
 	State       int       `json:"state"`
-	Created     time.Time `json:"created"` // friendly date
+	Created     time.Time `json:"created"`
 	Id          string    `json:"id"`
 }
 
