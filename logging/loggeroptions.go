@@ -1,4 +1,4 @@
-package main
+package logging
 
 import (
 	"log/slog"
@@ -15,7 +15,7 @@ import (
 // 	option slog.HandlerOptions
 // }
 
-func errorOptions() slog.HandlerOptions {
+func ErrorOptions() slog.HandlerOptions {
 	appEnv := os.Getenv("APP_ENV")
 	var options slog.HandlerOptions
 	if appEnv == "development" {
@@ -26,7 +26,18 @@ func errorOptions() slog.HandlerOptions {
 	return options
 }
 
-func activityOptions() slog.HandlerOptions {
+func ActivityOptions() slog.HandlerOptions {
 	options := slog.HandlerOptions{AddSource: false}
+	return options
+}
+
+func ServerOptions() slog.HandlerOptions {
+	appEnv := os.Getenv("APP_ENV")
+	var options slog.HandlerOptions
+	if appEnv == "development" {
+		options = slog.HandlerOptions{AddSource: true, Level: slog.LevelDebug}
+	} else {
+		options = slog.HandlerOptions{AddSource: false}
+	}
 	return options
 }

@@ -10,10 +10,20 @@
             "request": "launch",
             "mode": "debug",
             "program": ".",            
-            "args": ["-start","6", "-add" ,"Foo\""],
+            "args": ["-add" ,"Foo Add item from debug"],
             "env": {"APP_ENV": "development"
             }
         },
+        {
+            "name": "Launch file debug server",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": ".",            
+            "args": ["-runserver"],
+            "env": {"APP_ENV": "development"
+            }
+        },        
         {
             "name": "Launch file run",
             "type": "go",
