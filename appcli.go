@@ -17,14 +17,18 @@ import (
 const (
 	dataStorageFolderName string = "appcli"
 	dataFileName          string = "todolist.json"
-	errorFileName         string = "appcliError.log"
-	activityFileName      string = "appcliActivity.log"
-	serverLogFileName     string = "todolistserver.log"
+	logFileName           string = "todolistserver.log"
 )
 
-var errorLogger logging.AppLogger
-var ActivityLogger logging.AppLogger
+type runmode int
+
+const (
+	RunModeCLI int = iota
+	RunModeServer
+)
+
 var ServerLogger logging.AppLogger
+var runMode runmode
 
 func main() {
 	// input flags
@@ -61,6 +65,8 @@ func main() {
 	// // grab the flag input state from command line
 	flag.Parse()
 
+	runMode = runmode(RunModeCLI)
+
 	// but TODO "github.com/google/uuid" will provide a better one
 	id := store.GenerateId()
 	ctx := context.WithValue(context.Background(), appcontext.TraceIdKey, id)
@@ -73,36 +79,19 @@ func main() {
 		return
 	}
 
-	// wire up loggers
-	errorLogName := dir + "\\" + errorFileName
-	if errorFile, err := filer.OpenLogFile(errorLogName); err == nil {
-		defer errorFile.Close()
-		errorLogoptions := logging.ErrorOptions()
-		errorLogger.Log = logging.SetupLogger(errorFile, errorLogoptions)
-	}
-	activityLogName := dir + "\\" + activityFileName
-	if activityFile, err := filer.OpenLogFile(activityLogName); err == nil {
-		defer activityFile.Close()
-		activityLogoptions := logging.ActivityOptions()
-		ActivityLogger.Log = logging.SetupLogger(activityFile, activityLogoptions)
-	}
-	serverLogName := dir + "\\" + serverLogFileName
-	if serverLog, err := filer.OpenLogFile(serverLogName); err == nil {
-		defer serverLog.Close()
-		serverLogoptions := logging.ServerOptions()
-		ServerLogger.Log = logging.SetupLogger(serverLog, serverLogoptions)
+	// wire up logger
+	logName := dir + "\\" + logFileName
+	if logFileHandle, err := filer.OpenLogFile(logName); err == nil {
+		defer logFileHandle.Close()
+		logOptions := logging.LoggerOptions()
+		ServerLogger.Log = logging.SetupLogger(logFileHandle, logOptions)
+		ServerLogger.Log.InfoContext(ctx, "Starting up logging")
 	}
 
 	// init / pickup current list before process command
 	storageFile := fmt.Sprintf("%s\\%s", dir, dataFileName)
-	todoList, err := store.Restore(ctx, storageFile)
-	if err != nil {
-		// fatal database is unavailable
-		return
-	}
-
-	// for the api
-	openErr := store.Open(ctx, storageFile)
+	// open the database for cli and api
+	openErr := store.OpenSession(ctx, ServerLogger, storageFile)
 	if openErr != nil {
 		// fatal database is unavailable
 		return
@@ -111,29 +100,32 @@ func main() {
 	// process the flags
 	switch {
 	case *flagAdd != "":
-		nextKey := store.AddTask(ctx, todoList, *flagAdd)
-		store.ListTask(todoList, nextKey)
+		nextKey := store.AddTask(ctx, *flagAdd)
+		store.ListTask(nextKey)
 	case *flagUpdate > 0 && len(taskDescription) > 0:
-		store.DescriptionChange(ctx, todoList, *flagUpdate, taskDescription)
-		store.ListTask(todoList, *flagUpdate)
+		store.DescriptionChange(ctx, *flagUpdate, taskDescription)
+		store.ListTask(*flagUpdate)
 	case *flagNotStart > 0:
-		store.StateChange(ctx, todoList, *flagNotStart, store.StateNotStarted)
-		store.ListTask(todoList, *flagNotStart)
+		store.StateChange(ctx, *flagNotStart, store.StateNotStarted)
+		store.ListTask(*flagNotStart)
 	case *flagStart > 0:
-		store.StateChange(ctx, todoList, *flagStart, store.StateStarted)
-		store.ListTask(todoList, *flagStart)
+		store.StateChange(ctx, *flagStart, store.StateStarted)
+		store.ListTask(*flagStart)
 	case *flagComplete > 0:
-		store.StateChange(ctx, todoList, *flagComplete, store.StateCompleted)
-		store.ListTask(todoList, *flagComplete)
+		store.StateChange(ctx, *flagComplete, store.StateCompleted)
+		store.ListTask(*flagComplete)
 	case *flagDelete > 0:
-		store.DeleteTask(ctx, todoList, *flagDelete)
-		store.ListTask(todoList, -1)
+		store.DeleteTask(ctx, *flagDelete)
+		store.ListTask(-1)
 	case *flagList:
-		store.ListTask(todoList, taskId)
+		store.ListTask(taskId)
 	case *flagRunServer:
+		runMode = runmode(RunModeServer)
 		api.Run(ServerLogger)
 	}
 
-	// write back to the file
-	store.Save(ctx, storageFile, todoList)
+	if runMode == runmode(RunModeCLI) {
+		// write back to the file
+		store.SaveSession(ctx, storageFile)
+	}
 }

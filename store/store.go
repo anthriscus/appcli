@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -37,13 +38,13 @@ func GenerateId() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-func AddTask(ctx context.Context, list TodoListItems, newItem string) int {
-	itemKeys := collectKeys(list)
+func AddTask(ctx context.Context, newItem string) int {
+	itemKeys := collectKeys(sessionDatabase)
 	nextKey := highestKey(itemKeys) + 1
 	item := newTodoListItem(newItem, StateNotStarted, nextKey)
-	list[nextKey] = item
+	sessionDatabase[nextKey] = item
 
-	// ActivityLogger.Log.InfoContext(ctx, "Added item", "ID", nextKey, "descriptiont", newItem)
+	logger.Log.InfoContext(ctx, "Added item", "ID", nextKey, "description", newItem)
 	return nextKey
 }
 
@@ -58,62 +59,86 @@ func newTodoListItem(description string, state int, line int) TodoListItem {
 	return item
 }
 
-func DescriptionChange(ctx context.Context, list TodoListItems, index int, newDescription string) {
-	if len(list) > 0 {
-		if record, ok := list[index]; ok {
-			fmt.Printf("Current description: %s\n", list[index].Description)
+func DescriptionChange(ctx context.Context, index int, newDescription string) {
+	if len(sessionDatabase) > 0 {
+		if record, ok := sessionDatabase[index]; ok {
+			fmt.Printf("Current description: %s\n", sessionDatabase[index].Description)
 			fmt.Printf("Changing task %d description to : %s\n", index, newDescription)
-			// before := record.Description
+			before := record.Description
 			record.Description = newDescription
-			list[index] = record
-			// ActivityLogger.Log.InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
+			sessionDatabase[index] = record
+			logger.Log.InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
 		}
 	}
 }
 
 // change the state
-func StateChange(ctx context.Context, list TodoListItems, index int, state int) {
-	if len(list) > 0 {
-		if record, ok := list[index]; ok {
-			fmt.Printf("Current state: %s\n", StatusName[list[index].State])
+func StateChange(ctx context.Context, index int, state int) {
+	if len(sessionDatabase) > 0 {
+		if record, ok := sessionDatabase[index]; ok {
+			fmt.Printf("Current state: %s\n", StatusName[sessionDatabase[index].State])
 			fmt.Printf("Changing task %d state to : %s\n", index, StatusName[state])
-			before := StatusName[list[index].State]
+			before := StatusName[sessionDatabase[index].State]
 			after := StatusName[state]
 			fmt.Printf("before:%s after:%s\n", before, after)
 			record.State = state
-			list[index] = record
-			// ActivityLogger.Log.InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
+			sessionDatabase[index] = record
+			logger.Log.InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
 		}
+	}
+}
+
+func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
+	if !isDescription(item.Description) {
+		return TodoListItem{}, errors.New("description cannot be empty")
+	} else if !isState(item.State) {
+		return TodoListItem{}, errors.New("state is out of range")
+	}
+	if current, ok := sessionDatabase[item.Line]; !ok {
+		empty := TodoListItem{}
+		return empty, fmt.Errorf("error: %s", "item not found")
+	} else {
+		// only update the task and description
+		current.Description = item.Description
+		current.State = item.State
+		sessionDatabase[item.Line] = current
+		index := item.Line
+		after := item.Description
+		logger.Log.InfoContext(ctx, "Updated item", "ID", index, "description", after)
+		return current, nil
 	}
 }
 
 // delete a task
-
-func DeleteTask(ctx context.Context, list TodoListItems, index int) {
-	if len(list) > 0 {
-		if record, ok := list[index]; ok {
+func DeleteTask(ctx context.Context, index int) bool {
+	if len(sessionDatabase) > 0 {
+		if record, ok := sessionDatabase[index]; !ok {
+			return false
+		} else {
 			fmt.Printf("Deleting item: %d\n", index)
 			before := record.Description
 			fmt.Printf("before:%s\n", before)
-			delete(list, index)
-			// ActivityLogger.Log.InfoContext(ctx, "Deleted item", "ID", index, "before", before)
+			delete(sessionDatabase, index)
+			logger.Log.InfoContext(ctx, "Deleted item", "ID", index, "before", before)
+			return true
 		}
 	}
+	return false
 }
 
 // task list report
-func ListTask(list TodoListItems, index int) {
-	fmt.Printf("\nList length:%d\n", len(list))
+func ListTask(index int) {
+	fmt.Printf("\nList length:%d\n", len(sessionDatabase))
 
 	listTaskHeader()
-	if len(list) > 0 {
-		if record, ok := list[index]; ok {
+	if len(sessionDatabase) > 0 {
+		if record, ok := sessionDatabase[index]; ok {
 			listTaskLine(record)
 		} else {
-			itemKeys := collectKeys(list)
+			itemKeys := collectKeys(sessionDatabase)
 			slices.Sort(itemKeys)
 			for _, i := range itemKeys {
-				listTaskLine(list[i])
+				listTaskLine(sessionDatabase[i])
 			}
 		}
 	}
@@ -145,4 +170,16 @@ func highestKey(keys []int) int {
 		}
 	}
 	return key
+}
+
+func isDescription(description string) bool {
+	return description != ""
+}
+
+func isState(state int) bool {
+	states := make([]int, 0, len(StatusName))
+	for i := range StatusName {
+		states = append(states, i)
+	}
+	return slices.Contains(states, state)
 }

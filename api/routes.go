@@ -24,7 +24,7 @@ func addRoutes(mux *http.ServeMux) {
 		{method: "GET", route: "/get/{taskId}", handler: GetByIndex},
 		{method: "GET", route: "/get", handler: GetList},
 		{method: "POST", route: "/create", handler: Create},
-		{method: "PUT", route: "/update/{taskId}", handler: UpdateByIndex},
+		{method: "PUT", route: "/update", handler: UpdateTask},
 	}
 
 	if pth, ok := os.Getwd(); ok == nil {
