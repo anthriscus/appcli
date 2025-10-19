@@ -152,7 +152,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		w.Write(jsonError(fmt.Errorf("bad taskid")))
 		return
 	} else {
-		if ok := store.Delete(id); ok != nil {
+		if ok := store.Delete(r.Context(), id); ok != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write(jsonError(ok))
 		} else {

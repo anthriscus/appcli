@@ -3,8 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-
-	"github.com/anthriscus/appcli/appcontext"
 )
 
 // get by taskid
@@ -41,18 +39,10 @@ func Update(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 	}
 }
 
-func Delete(taskId int) error {
-	ctx := tempContext()
+func Delete(ctx context.Context, taskId int) error {
 	if !DeleteTask(ctx, taskId) {
 		return fmt.Errorf("item not found")
 	} else {
 		return nil
 	}
-}
-
-// very temp situation for context obj , while we work out Handling all the context flow.
-// we should already have a context at this point
-func tempContext() context.Context {
-	id := GenerateId()
-	return context.WithValue(context.Background(), appcontext.TraceIdKey, id)
 }
