@@ -10,9 +10,6 @@ import (
 	"github.com/anthriscus/appcli/logging"
 )
 
-// data repository
-// potential to expand to load from json database/mongodb/sql datastore
-
 var (
 	sessionDatabase TodoListItems
 	logger          logging.AppLogger
@@ -100,8 +97,8 @@ func restoreList(ctx context.Context, destination io.Reader) (TodoListItems, err
 		err := json.Unmarshal(data, &restoredList)
 		if err != nil {
 			fmt.Println(err)
-			fmt.Println("returning empty list json error")
-			fmt.Printf("Error restoring list from json err:%s\n", err)
+			// fmt.Println("returning empty list json error")
+			// fmt.Printf("Error restoring list from json err:%s\n", err)
 			logger.Log.ErrorContext(ctx, "Error restoring list from json", "err", err)
 			return TodoListItems{}, nil
 		}

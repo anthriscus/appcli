@@ -78,12 +78,12 @@ func Create(w http.ResponseWriter, r *http.Request) {
 	var item store.TodoListItem
 	if ok := json.NewDecoder(r.Body).Decode(&item); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(jsonError(fmt.Errorf("invalid json")))
+		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
 		if newItem, ok := store.Create(r.Context(), item); ok != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(ok))
 		} else {
 			w.WriteHeader((http.StatusOK))
 			if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
@@ -98,12 +98,12 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 	taskId := r.PathValue("taskId")
 	if id, ok := strconv.Atoi(taskId); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(jsonError(ok))
+		json.NewEncoder(w).Encode(jsonError(ok))
 		return
 	} else {
 		if item, ok := store.GetByIndex(id); ok != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(ok))
 			return
 		} else {
 			if ok := json.NewEncoder(w).Encode(&item); ok != nil {
@@ -117,7 +117,7 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 func GetList(w http.ResponseWriter, r *http.Request) {
 	if items, ok := store.GetList(); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(jsonError(ok))
+		json.NewEncoder(w).Encode(jsonError(ok))
 		return
 	} else {
 		if ok := json.NewEncoder(w).Encode(&items); ok != nil {
@@ -131,12 +131,12 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 	var item store.TodoListItem
 	if ok := json.NewDecoder(r.Body).Decode(&item); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(jsonError(fmt.Errorf("invalid json")))
+		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
 		if newItem, ok := store.Update(r.Context(), item); ok != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(ok))
 		} else {
 			if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
 				logger.Log.ErrorContext(r.Context(), "UpdateTask", "error", ok)
@@ -149,12 +149,12 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 	taskId := r.PathValue("taskId")
 	if id, ok := strconv.Atoi(taskId); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(jsonError(fmt.Errorf("bad taskid")))
+		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("bad taskid")))
 		return
 	} else {
 		if ok := store.Delete(r.Context(), id); ok != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(ok))
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -162,8 +162,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// format for json in response results
-func jsonError(err error) []byte {
-	e := apiError{Error: fmt.Sprintf("\"%s\"", err.Error())}
-	return []byte(fmt.Sprintf("%+v", e))
+// helper format for json in response results
+func jsonError(err error) apiError {
+	return apiError{Error: err.Error()}
 }

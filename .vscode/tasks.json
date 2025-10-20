@@ -5,43 +5,77 @@
         {
             "label": "install",
             "command": "go",
-            "args": ["install", "-v", "./..."],
+            "args": [
+                "install",
+                "-v",
+                "./..."
+            ],
             "group": "build",
-            "type": "shell",
+            "type": "shell"
         },
         {
             "label": "run",
             "command": "go",
-            "args": ["run", "./..."],
+            "args": [
+                "run",
+                "./..."
+            ],
             "group": "build",
-            "type": "shell",
+            "type": "shell"
         },
         {
             "label": "run development env",
             "command": "go",
-            "args": ["run", "./..."],
+            "args": [
+                "run",
+                "./..."
+            ],
             "group": "build",
             "type": "shell",
             "options": {
-                "env": {"APP_ENV": "development"}
+                "env": {
+                    "APP_ENV": "development"
+                }
             }
         },
         {
             "label": "run production env",
             "command": "go",
-            "args": ["run", "./..."],
+            "args": [
+                "run",
+                "./..."
+            ],
             "group": "build",
             "type": "shell",
             "options": {
-                "env": {"APP_ENV": "production"}
+                "env": {
+                    "APP_ENV": "production"
+                }
             }
-        },        
+        },
         {
             "label": "test",
             "command": "go",
-            "args": ["test", "-v", "./..."],
+            "args": [
+                "test",
+                "-v",
+                "./..."
+            ],
             "group": "test",
-            "type": "shell",
+            "type": "shell"
         },
+        {
+            "type": "go",
+            "label": "go: build workspace",
+            "command": "build",
+            "args": [
+                "."
+            ],
+            "problemMatcher": [
+                "$go"
+            ],
+            "group": "build",
+            "detail": "${workspacefolder}; go build appcli.go"
+        }
     ],
 }
