@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 
@@ -16,12 +17,12 @@ type AppLogger struct {
 	Log *slog.Logger
 }
 
-func SetupLogger(fi *os.File, options slog.HandlerOptions) *slog.Logger {
-	baseHandler := slog.NewJSONHandler(fi, &options)
-	// add in the context handler
-	customHandler := &ContextHandler{Handler: baseHandler}
-	logger := slog.New(customHandler)
-	return logger
+var (
+	logger AppLogger
+)
+
+func Log() *slog.Logger {
+	return logger.Log
 }
 
 func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -29,4 +30,15 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String(string(appcontext.TraceIdKey), traceId))
 	}
 	return h.Handler.Handle(ctx, r)
+}
+
+func Setup(w io.Writer, options slog.HandlerOptions) {
+	baseHandler := slog.NewJSONHandler(w, &options)
+	// add in the context handler
+	customHandler := &ContextHandler{Handler: baseHandler}
+	logger.Log = slog.New(customHandler)
+}
+
+func Default() {
+	logger.Log = slog.New(slog.NewTextHandler(os.Stdout, nil))
 }

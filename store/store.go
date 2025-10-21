@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/anthriscus/appcli/logging"
 )
 
 const (
@@ -44,7 +46,7 @@ func AddTask(ctx context.Context, newItem string) int {
 	item := newTodoListItem(newItem, StateNotStarted, nextKey)
 	sessionDatabase[nextKey] = item
 
-	logger.Log.InfoContext(ctx, "Added item", "ID", nextKey, "description", newItem)
+	logging.Log().InfoContext(ctx, "Added item", "ID", nextKey, "description", newItem)
 	return nextKey
 }
 
@@ -67,7 +69,7 @@ func DescriptionChange(ctx context.Context, index int, newDescription string) {
 			before := record.Description
 			record.Description = newDescription
 			sessionDatabase[index] = record
-			logger.Log.InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
+			logging.Log().InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
 		}
 	}
 }
@@ -83,7 +85,7 @@ func StateChange(ctx context.Context, index int, state int) {
 			fmt.Printf("before:%s after:%s\n", before, after)
 			record.State = state
 			sessionDatabase[index] = record
-			logger.Log.InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
+			logging.Log().InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
 		}
 	}
 }
@@ -104,7 +106,7 @@ func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 		sessionDatabase[item.Line] = current
 		index := item.Line
 		after := item.Description
-		logger.Log.InfoContext(ctx, "Updated item", "ID", index, "description", after)
+		logging.Log().InfoContext(ctx, "Updated item", "ID", index, "description", after)
 		return current, nil
 	}
 }
@@ -119,7 +121,7 @@ func DeleteTask(ctx context.Context, index int) bool {
 			before := record.Description
 			fmt.Printf("before:%s\n", before)
 			delete(sessionDatabase, index)
-			logger.Log.InfoContext(ctx, "Deleted item", "ID", index, "before", before)
+			logging.Log().InfoContext(ctx, "Deleted item", "ID", index, "before", before)
 			return true
 		}
 	}

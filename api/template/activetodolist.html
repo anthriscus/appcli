@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Todo list</title>
+    <style>
+        .taskheader {
+         font-weight: bold;
+        }
+        .taskbox {
+            display: inline-block;
+            font-weight: bold;
+            width: 10em;
+        }
+        .taskid {
+            font-weight: bold;
+        }
+        .descriptionheader {
+         font-weight: bold;
+        }
+        .descriptionbox {
+            display: inline-block;
+            font-weight: normal;
+            width: 30em;
+        }
+    </style>
+</head>
+<body>
+    <p class="taskheader">Todo list items</p>
+    <div>
+        <div class="taskbox">
+            <span class="taskheader">Task:</span>
+        </div>
+        <div class="descriptionbox">
+            <span class="descriptionheader">Description</span>
+        </div>
+    </div>
+    {{range .}}
+    <div>
+        <ul>
+            <li>
+                <div>
+                    <div class="taskbox">
+                        <span class="taskid">{{.Line}}:</span>
+                    </div>
+                    <div class="descriptionbox">
+                        <span>{{.Description}}</span>
+                    </div>
+                </div>
+            </li>
+        </ul>
+    </div>
+    {{else}}<div><strong>There are no items in currently in your list</strong></div>{{end}}
+</body>
+
+</html>

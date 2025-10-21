@@ -31,6 +31,13 @@
             "mode": "exec",
             "program": ".", 
             "args": ["-add", "\"Lorem ipsum dolor sit amet, consectetur adipiscing elit\""]
+        },
+        {
+            "name": "test current file",
+            "type": "go",
+            "request": "launch",
+            "showLog": true
         }
+
     ]
 }

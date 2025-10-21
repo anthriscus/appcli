@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/anthriscus/appcli/appcontext"
+	"github.com/anthriscus/appcli/logging"
 )
 
 func addMiddleware(mux *http.ServeMux) http.HandlerFunc {
@@ -21,7 +22,7 @@ func tracerMiddleware(next http.Handler) http.HandlerFunc {
 		fmt.Printf("ROUTE path: %s\n", r.URL.Path)
 		id := appcontext.GenerateId()
 		ctx := context.WithValue(r.Context(), appcontext.TraceIdKey, id)
-		logger.Log.InfoContext(ctx, "tracer", "route", r.URL.Path)
+		logging.Log().InfoContext(ctx, "tracer", "route", r.URL.Path)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -29,7 +30,7 @@ func tracerMiddleware(next http.Handler) http.HandlerFunc {
 // only for api calls and not general file content
 func contentTypeMiddleware(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Log.InfoContext(r.Context(), "contentType set", "route", r.URL.Path)
+		logging.Log().InfoContext(r.Context(), "contentType set", "route", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		next.ServeHTTP(w, r)
 	})

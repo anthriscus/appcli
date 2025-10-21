@@ -27,7 +27,7 @@ const (
 	RunModeServer
 )
 
-var ServerLogger logging.AppLogger
+// var ServerLogger logging.AppLogger
 var runMode runmode
 
 func main() {
@@ -84,14 +84,14 @@ func main() {
 	if logFileHandle, err := filer.OpenLogFile(logName); err == nil {
 		defer logFileHandle.Close()
 		logOptions := logging.LoggerOptions()
-		ServerLogger.Log = logging.SetupLogger(logFileHandle, logOptions)
-		ServerLogger.Log.InfoContext(ctx, "Starting up logging")
+		logging.Setup(logFileHandle, logOptions)
+		logging.Log().InfoContext(ctx, "Starting up logging with static logger")
 	}
 
 	// init / pickup current list before process command
 	storageFile := fmt.Sprintf("%s\\%s", dir, dataFileName)
 	// open the database for cli and api
-	openErr := store.OpenSession(ctx, ServerLogger, storageFile)
+	openErr := store.OpenSession(ctx, storageFile)
 	if openErr != nil {
 		// fatal database is unavailable
 		return
@@ -121,7 +121,7 @@ func main() {
 		store.ListTask(taskId)
 	case *flagRunServer:
 		runMode = runmode(RunModeServer)
-		api.Run(ServerLogger)
+		api.Run()
 	}
 
 	if runMode == runmode(RunModeCLI) {

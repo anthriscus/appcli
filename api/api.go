@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json" // only temp in this package for our mock data which later will be removed and will become a byte stream
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,13 +25,7 @@ type apiError struct {
 	Error string
 }
 
-var (
-	logger logging.AppLogger
-)
-
-func Run(l logging.AppLogger) {
-	logger = l
-
+func Run() {
 	id := appcontext.GenerateId()
 	ctx := context.WithValue(context.Background(), appcontext.TraceIdKey, id)
 
@@ -40,7 +35,7 @@ func Run(l logging.AppLogger) {
 	endPoint := ":" + listenOn
 	muxChain := addMiddleware(mux)
 
-	logger.Log.InfoContext(ctx, "Starting server", "listeningOn", listenOn)
+	logging.Log().InfoContext(ctx, "Starting server", "listeningOn", listenOn)
 	fmt.Printf("Starting server listening on:%s\n ", listenOn)
 
 	// await on a shutdown
@@ -56,7 +51,7 @@ func Run(l logging.AppLogger) {
 	// start server on a routine so we can catch the terminator cancel below.
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
-			logger.Log.ErrorContext(ctx, "Listening ended", "error", err)
+			logging.Log().ErrorContext(ctx, "Listening ended", "error", err)
 		}
 	}()
 
@@ -71,7 +66,7 @@ func Run(l logging.AppLogger) {
 	fmt.Printf("Got cancel signal %+v\n", s)
 	store.Commit(ctx)
 	fmt.Println("Goodbye")
-	logger.Log.InfoContext(ctx, "Goodbye")
+	logging.Log().InfoContext(ctx, "Goodbye")
 }
 
 func Create(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +82,7 @@ func Create(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader((http.StatusOK))
 			if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
-				logger.Log.ErrorContext(r.Context(), "Create", "error", ok)
+				logging.Log().ErrorContext(r.Context(), "Create", "error", ok)
 			}
 		}
 	}
@@ -107,7 +102,7 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			if ok := json.NewEncoder(w).Encode(&item); ok != nil {
-				logger.Log.ErrorContext(r.Context(), "GetByIndex", "error", ok)
+				logging.Log().ErrorContext(r.Context(), "GetByIndex", "error", ok)
 				return
 			}
 		}
@@ -121,7 +116,7 @@ func GetList(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		if ok := json.NewEncoder(w).Encode(&items); ok != nil {
-			logger.Log.ErrorContext(r.Context(), "GetList", "error", ok)
+			logging.Log().ErrorContext(r.Context(), "GetList", "error", ok)
 			return
 		}
 	}
@@ -139,7 +134,7 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(jsonError(ok))
 		} else {
 			if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
-				logger.Log.ErrorContext(r.Context(), "UpdateTask", "error", ok)
+				logging.Log().ErrorContext(r.Context(), "UpdateTask", "error", ok)
 			}
 		}
 	}
@@ -158,6 +153,22 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 			return
+		}
+	}
+}
+
+func GetActiveList(w http.ResponseWriter, r *http.Request) {
+	if items, ok := store.GetList(); ok != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	} else {
+		if t, ok := template.ParseFiles("./api/template/activetodolist.html"); ok != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			// compile the template and serve to the response writer
+			if ok := t.Execute(w, items); ok != nil {
+				logging.Log().ErrorContext(r.Context(), "template parse failed")
+			}
 		}
 	}
 }

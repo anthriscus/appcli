@@ -26,13 +26,16 @@ func addRoutes(mux *http.ServeMux) {
 		{method: "POST", route: "/create", handler: Create},
 		{method: "PUT", route: "/update", handler: UpdateTask},
 	}
-
-	if pth, ok := os.Getwd(); ok == nil {
-		fs := http.FileServer(http.Dir(pth + "\\files"))
-		mux.Handle("GET"+" "+"/", fs)
-	}
 	// the api routes have a json media type header
 	for _, r := range Routes {
 		mux.HandleFunc(r.method+" "+r.route, contentTypeMiddleware(r.handler))
 	}
+
+	if pth, ok := os.Getwd(); ok == nil {
+		// add the static about page route without content type
+		fs := http.FileServer(http.Dir(pth + "\\files"))
+		mux.Handle("GET"+" "+"/", fs)
+	}
+	// add the dynamic list template route without content type
+	mux.HandleFunc("GET /list", GetActiveList)
 }
