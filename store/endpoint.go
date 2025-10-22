@@ -21,8 +21,10 @@ func GetList() (TodoListItems, error) {
 }
 
 func Create(ctx context.Context, candidate TodoListItem) (TodoListItem, error) {
-	taskId := AddTask(ctx, candidate.Description)
-	if current, ok := sessionDatabase[taskId]; !ok {
+	if taskId, ok := AddTask(ctx, candidate.Description); ok != nil {
+		empty := TodoListItem{}
+		return empty, fmt.Errorf("not added")
+	} else if current, ok := sessionDatabase[taskId]; !ok {
 		empty := TodoListItem{}
 		return empty, fmt.Errorf("not added")
 	} else {

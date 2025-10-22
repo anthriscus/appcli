@@ -40,14 +40,18 @@ func GenerateId() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-func AddTask(ctx context.Context, newItem string) int {
+func AddTask(ctx context.Context, newItem string) (int, error) {
+
+	if !isDescription(newItem) {
+		return 0, errors.New("description cannot be empty")
+	}
 	itemKeys := collectKeys(sessionDatabase)
 	nextKey := highestKey(itemKeys) + 1
 	item := newTodoListItem(newItem, StateNotStarted, nextKey)
 	sessionDatabase[nextKey] = item
 
 	logging.Log().InfoContext(ctx, "Added item", "ID", nextKey, "description", newItem)
-	return nextKey
+	return nextKey, nil
 }
 
 func newTodoListItem(description string, state int, line int) TodoListItem {
@@ -61,23 +65,33 @@ func newTodoListItem(description string, state int, line int) TodoListItem {
 	return item
 }
 
-func DescriptionChange(ctx context.Context, index int, newDescription string) {
+func DescriptionChange(ctx context.Context, index int, newDescription string) error {
 	if len(sessionDatabase) > 0 {
-		if record, ok := sessionDatabase[index]; ok {
+		if !isDescription(newDescription) {
+			return errors.New("description cannot be empty")
+		} else if record, ok := sessionDatabase[index]; !ok {
+			return fmt.Errorf("cannot find item %d", index)
+		} else {
 			fmt.Printf("Current description: %s\n", sessionDatabase[index].Description)
 			fmt.Printf("Changing task %d description to : %s\n", index, newDescription)
 			before := record.Description
 			record.Description = newDescription
 			sessionDatabase[index] = record
 			logging.Log().InfoContext(ctx, "Updated item description", "ID", index, "before", before, "after", newDescription)
+			return nil
 		}
 	}
+	return errors.New("cannot set description")
 }
 
 // change the state
-func StateChange(ctx context.Context, index int, state int) {
+func StateChange(ctx context.Context, index int, state int) error {
 	if len(sessionDatabase) > 0 {
-		if record, ok := sessionDatabase[index]; ok {
+		if !isState(state) {
+			return errors.New("state is out of range")
+		} else if record, ok := sessionDatabase[index]; !ok {
+			return fmt.Errorf("cannot find item %d", index)
+		} else {
 			fmt.Printf("Current state: %s\n", StatusName[sessionDatabase[index].State])
 			fmt.Printf("Changing task %d state to : %s\n", index, StatusName[state])
 			before := StatusName[sessionDatabase[index].State]
@@ -86,8 +100,10 @@ func StateChange(ctx context.Context, index int, state int) {
 			record.State = state
 			sessionDatabase[index] = record
 			logging.Log().InfoContext(ctx, "Updated item status", "ID", index, "before", before, "after", after)
+			return nil
 		}
 	}
+	return errors.New("cannote set state")
 }
 
 func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
@@ -165,7 +181,7 @@ func collectKeys(data TodoListItems) []int {
 }
 
 func highestKey(keys []int) int {
-	key := 1
+	key := 0
 	for _, i := range keys {
 		if i > key {
 			key = i

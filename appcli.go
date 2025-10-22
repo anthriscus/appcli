@@ -100,20 +100,25 @@ func main() {
 	// process the flags
 	switch {
 	case *flagAdd != "":
-		nextKey := store.AddTask(ctx, *flagAdd)
-		store.ListTask(nextKey)
+		if nextKey, ok := store.AddTask(ctx, *flagAdd); ok == nil {
+			store.ListTask(nextKey)
+		}
 	case *flagUpdate > 0 && len(taskDescription) > 0:
-		store.DescriptionChange(ctx, *flagUpdate, taskDescription)
-		store.ListTask(*flagUpdate)
+		if ok := store.DescriptionChange(ctx, *flagUpdate, taskDescription); ok == nil {
+			store.ListTask(*flagUpdate)
+		}
 	case *flagNotStart > 0:
-		store.StateChange(ctx, *flagNotStart, store.StateNotStarted)
-		store.ListTask(*flagNotStart)
+		if ok := store.StateChange(ctx, *flagNotStart, store.StateNotStarted); ok == nil {
+			store.ListTask(*flagNotStart)
+		}
 	case *flagStart > 0:
-		store.StateChange(ctx, *flagStart, store.StateStarted)
-		store.ListTask(*flagStart)
+		if ok := store.StateChange(ctx, *flagStart, store.StateStarted); ok == nil {
+			store.ListTask(*flagStart)
+		}
 	case *flagComplete > 0:
-		store.StateChange(ctx, *flagComplete, store.StateCompleted)
-		store.ListTask(*flagComplete)
+		if ok := store.StateChange(ctx, *flagComplete, store.StateCompleted); ok == nil {
+			store.ListTask(*flagComplete)
+		}
 	case *flagDelete > 0:
 		store.DeleteTask(ctx, *flagDelete)
 		store.ListTask(-1)

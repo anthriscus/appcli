@@ -11,9 +11,16 @@ import (
 )
 
 var (
-	sessionDatabase TodoListItems
+	sessionDatabase TodoListItems = TodoListItems{}
 	datastoreFile   string
 )
+
+func currentList() TodoListItems {
+	return sessionDatabase
+}
+func resetList() {
+	sessionDatabase = TodoListItems{}
+}
 
 func IsOpen() bool {
 	return (sessionDatabase != nil)

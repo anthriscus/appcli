@@ -1,17 +1,17 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"testing"
+	"time"
 
-	"github.com/anthriscus/appcli/appcontext"
 	"github.com/anthriscus/appcli/logging"
 )
 
 func TestMain(m *testing.M) {
 	logging.Default()
 	logging.Log().Info("setup default logging to std.io for tests")
+	resetList()
 	m.Run()
 }
 
@@ -64,61 +64,167 @@ func TestIsStateAll(t *testing.T) {
 	}
 }
 
-func TestOpenSession(t *testing.T) {
-	dir := t.TempDir()
+func TestAddTask(t *testing.T) {
 	var tests = []struct {
-		datafile string
-		want     bool
+		description string
+		want        bool
 	}{
-		{
-			datafile: dir + "\\testData.json",
-			want:     true},
-		{
-			datafile: dir + "\\",
-			want:     false},
+		{description: "Original task description buy apples",
+			want: true},
+		{description: "",
+			want: false},
 	}
+	resetList()
 	ctx := context.Background()
-
-	for i, tc := range tests {
-		if ok := OpenSession(ctx, tc.datafile); tc.want != (ok == nil) {
-			t.Errorf("test %d want: %t got: %t", i, tc.want, (ok == nil))
-		} else {
-			logging.Log().Info("test looking:", "i", i, "want", tc.want, "got", (ok == nil))
+	for _, tc := range tests {
+		if r, ok := AddTask(ctx, tc.description); tc.want != (ok == nil) {
+			t.Errorf("not added %s\n", tc.description)
+		} else if v, ok := currentList()[r]; tc.want != ok {
+			t.Errorf("not added %s\n", tc.description)
+		} else if v.Description != tc.description {
+			t.Errorf("not added %s\n", tc.description)
+		}
+	}
+}
+func TestDescriptionChange(t *testing.T) {
+	var tests = []struct {
+		description    string
+		newDescription string
+		index          int
+		want           bool
+	}{
+		{description: "Original task description buy apples",
+			newDescription: "Updated task description buy apples",
+			index:          1,
+			want:           true},
+		{description: "Original task description buy pears",
+			newDescription: "",
+			index:          2,
+			want:           false},
+	}
+	resetList()
+	ctx := context.Background()
+	for _, tc := range tests {
+		if _, ok := AddTask(ctx, tc.description); ok != nil {
+			t.Errorf("item %d not added to for a change %s\n", tc.index, tc.description)
+		} else if ok := DescriptionChange(ctx, tc.index, tc.newDescription); tc.want != (ok == nil) {
+			t.Errorf("item %d not changd %s\n", tc.index, tc.newDescription)
 		}
 	}
 }
 
-func TestRestoreList(t *testing.T) {
-	ctx := context.WithValue(context.Background(), appcontext.TraceIdKey, "42")
+func TestUpdateTask(t *testing.T) {
 	var tests = []struct {
-		json string
-		want bool
+		description string
+		newItem     TodoListItem
+		want        bool
 	}{
-		{json: "{\"42\": {\"line\": 42,\"description\": \"Build awesome new app with Go\",\"state\": 1,\"created\": \"2025-10-10T01:00:00.0000000Z\",\"id\": \"1234\"} }",
-			want: false},
-		{
-			json: "{}",
-			want: false},
-		{json: "",
-			want: false},
-		{json: "acme task",
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        1,
+				Id:          "1",
+				Description: "Updated task description buy apples",
+				State:       1,
+				Created:     time.Now().UTC(),
+			},
 			want: true},
-		{json: "\"acme task\"",
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        2,
+				Id:          "2",
+				Description: "", // bad description
+				State:       1,
+				Created:     time.Now().UTC(),
+			},
+			want: false},
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        3,
+				Id:          "3",
+				Description: "Updated task description buy apples",
+				State:       -1, // bad state
+				Created:     time.Now().UTC(),
+			},
+			want: false},
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        4,
+				Id:          "4",
+				Description: "Updated task description buy apples",
+				State:       1,
+				Created:     time.Now().UTC(),
+			},
 			want: true},
-		{json: "\"1\": {\"line\": 42,\"description\":",
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        5,
+				Id:          "5",
+				Description: "Updated task description buy apples",
+				State:       2,
+				Created:     time.Now().UTC(),
+			},
 			want: true},
+		{description: "Original task description buy apples",
+			newItem: TodoListItem{
+				Line:        6,
+				Id:          "6",
+				Description: "Updated task description buy apples",
+				State:       3, // bad state
+				Created:     time.Now().UTC(),
+			},
+			want: false},
+	}
+	resetList()
+	ctx := context.Background()
+	for _, tc := range tests {
+		if _, ok := AddTask(ctx, tc.description); ok != nil {
+			t.Errorf("item %d not added to for a test change %s\n", tc.newItem.Line, tc.description)
+		} else if _, ok := UpdateTask(ctx, tc.newItem); tc.want != (ok == nil) {
+			t.Errorf("item %d not changd %s\n", tc.newItem.Line, tc.newItem.Description)
+		}
+	}
+}
+
+func TestDeleteTask(t *testing.T) {
+	var tests = []struct {
+		description string
+		item        int
+		addToList   bool
+		want        bool
+	}{
+		{description: "Original task description buy apples",
+			item:      1,
+			addToList: true,
+			want:      true},
+		{description: "Original task description buy apples",
+			item:      -1,
+			addToList: false,
+			want:      false},
+		{description: "Original task description buy apples",
+			item:      0,
+			addToList: false,
+			want:      false},
+		{description: "Original task description buy apples",
+			item:      2,
+			addToList: false,
+			want:      false},
 	}
 
-	// assert as a todolist
-	for i, tc := range tests {
-		b := new(bytes.Buffer)
-		b.WriteString(tc.json)
-		// check a restore
-		logging.Log().Info("CHECKING:", "json", tc.json)
-		if v, ok := restoreList(ctx, b); tc.want != (ok != nil) {
-			t.Errorf("restoring list from json , %d got error on item  %+v", i, tc.json)
-		} else if v == nil {
-			t.Errorf("restoring list from json , %d want empty item got nil %+v", i, tc.json)
+	ctx := context.Background()
+	for _, tc := range tests {
+		switch {
+		case tc.addToList:
+			resetList()
+			if _, ok := AddTask(ctx, tc.description); ok != nil {
+				t.Errorf("items %d not added for a delete test %s\n", tc.item, tc.description)
+			} else if ok := DeleteTask(ctx, tc.item); tc.want != ok {
+				t.Errorf("item %d not deleted %s\n", tc.item, tc.description)
+			}
+		case !tc.addToList:
+			resetList()
+			if ok := DeleteTask(ctx, tc.item); tc.want != ok {
+				t.Errorf("item %d not deleted %s\n", tc.item, tc.description)
+			}
 		}
 	}
 }
