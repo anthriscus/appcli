@@ -254,12 +254,12 @@ func TestDelete(t *testing.T) {
 			resetList()
 			if _, ok := AddTask(ctx, tc.description); ok != nil {
 				t.Errorf("items %d not added for a delete test %s\n", tc.item, tc.description)
-			} else if ok := DeleteTask(ctx, tc.item); tc.want != ok {
+			} else if ok := DeleteTask(ctx, tc.item); tc.want != (ok == nil) {
 				t.Errorf("item %d not deleted %s\n", tc.item, tc.description)
 			}
 		case !tc.addToList:
 			resetList()
-			if ok := DeleteTask(ctx, tc.item); tc.want != ok {
+			if ok := DeleteTask(ctx, tc.item); tc.want != (ok == nil) {
 				t.Errorf("item %d not deleted %s\n", tc.item, tc.description)
 			}
 		}

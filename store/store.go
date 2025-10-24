@@ -128,20 +128,20 @@ func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 }
 
 // delete a task
-func DeleteTask(ctx context.Context, index int) bool {
+func DeleteTask(ctx context.Context, index int) error {
 	if len(sessionDatabase) > 0 {
 		if record, ok := sessionDatabase[index]; !ok {
-			return false
+			return errors.New("item not found")
 		} else {
 			fmt.Printf("Deleting item: %d\n", index)
 			before := record.Description
 			fmt.Printf("before:%s\n", before)
 			delete(sessionDatabase, index)
 			logging.Log().InfoContext(ctx, "Deleted item", "ID", index, "before", before)
-			return true
+			return nil
 		}
 	}
-	return false
+	return errors.New("item cannot be deleted")
 }
 
 // task list report

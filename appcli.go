@@ -120,8 +120,9 @@ func main() {
 			store.ListTask(*flagComplete)
 		}
 	case *flagDelete > 0:
-		store.DeleteTask(ctx, *flagDelete)
-		store.ListTask(-1)
+		if ok := store.DeleteTask(ctx, *flagDelete); ok == nil {
+			store.ListTask(-1)
+		}
 	case *flagList:
 		store.ListTask(taskId)
 	case *flagRunServer:

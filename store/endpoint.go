@@ -42,9 +42,9 @@ func Update(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 }
 
 func Delete(ctx context.Context, taskId int) error {
-	if !DeleteTask(ctx, taskId) {
-		return fmt.Errorf("item not found")
+	if ok := DeleteTask(ctx, taskId); ok != nil {
+		return ok
 	} else {
-		return nil
+		return ok
 	}
 }
