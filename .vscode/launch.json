@@ -37,7 +37,13 @@
             "type": "go",
             "request": "launch",
             "showLog": true
-        }
+        },{
+            "name": "Launch attach to process",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": "${command:pickProcess}"
+    }
 
     ]
 }

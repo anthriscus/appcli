@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/anthriscus/appcli/appcontext"
 	"github.com/anthriscus/appcli/logging"
@@ -39,16 +38,16 @@ func Run() {
 	fmt.Printf("Starting server listening on:%s\n ", listenOn)
 
 	// await on a shutdown
-	terminator := make(chan os.Signal, 1)
+	shutdownChan := make(chan os.Signal, 1)
 	// define what we will wait for
-	signal.Notify(terminator, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
 	srv := &http.Server{
 		Addr:    endPoint,
 		Handler: muxChain,
 	}
 
-	// start server on a routine so we can catch the terminator cancel below.
+	// start server on a routine so we can catch the shutdownChan cancel below.
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			logging.Log().ErrorContext(ctx, "Listening ended", "error", err)
@@ -62,14 +61,29 @@ func Run() {
 
 	// block until the signal
 	fmt.Println("waiting for your signal")
-	s := <-terminator
+	sig := <-shutdownChan
+	handleShutdown(ctx, srv, sig)
+}
 
-	// Shutdown the server
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+func handleShutdown(ctx context.Context, srv *http.Server, sig os.Signal) {
+	fmt.Printf("Got cancel signal %+v\n", sig)
+	logging.Log().InfoContext(ctx, "Shutdown requested", "signal", sig)
 
-	fmt.Printf("Got cancel signal %+v\n", s)
-	store.Commit(ctx)
+	// shutdown the server
+	if ok := srv.Shutdown(ctx); ok != nil {
+		logging.Log().ErrorContext(ctx, "Shutdown server failed", "error", ok)
+	} else {
+		logging.Log().InfoContext(ctx, "Server shutdown")
+	}
+
+	// commit the data
+	fmt.Println("Commiting data in shutdown")
+	logging.Log().InfoContext(ctx, "Commiting data in shutdown")
+	if ok := store.Commit(ctx); ok != nil {
+		logging.Log().ErrorContext(ctx, "Data commit failed", "error", ok)
+	} else {
+		logging.Log().InfoContext(ctx, "Committed")
+	}
 	fmt.Println("Goodbye")
 	logging.Log().InfoContext(ctx, "Goodbye")
 }
@@ -82,7 +96,7 @@ func Create(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		actorHandler(apiCreate(StoreRequest{writer: w, request: r, todoListItem: item}))
-		result := <-ResponsePipeline
+		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))
@@ -110,7 +124,7 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 	} else {
 		findData := store.TodoListItem{Line: id}
 		actorHandler(apiGetListByIndex(StoreRequest{writer: w, request: r, todoListItem: findData}))
-		result := <-ResponsePipeline
+		result := <-ResponseChan
 		// if item, ok := store.GetByIndex(id); ok != nil {
 		// 	w.WriteHeader(http.StatusBadRequest)
 		// 	json.NewEncoder(w).Encode(jsonError(ok))
@@ -138,7 +152,7 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 
 func GetList(w http.ResponseWriter, r *http.Request) {
 	actorHandler(apiGetList())
-	result := <-ResponsePipeline
+	result := <-ResponseChan
 	// if items, ok := store.GetList(); ok != nil {
 	// 	w.WriteHeader(http.StatusBadRequest)
 	// 	json.NewEncoder(w).Encode(jsonError(ok))
@@ -177,7 +191,7 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		// 	}
 		// }
 		actorHandler(apiUpdate(StoreRequest{writer: w, request: r, todoListItem: item}))
-		result := <-ResponsePipeline
+		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(ok))
@@ -205,7 +219,7 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		// }
 		deleteData := store.TodoListItem{Line: id}
 		actorHandler(apiDelete(StoreRequest{writer: w, request: r, todoListItem: deleteData}))
-		result := <-ResponsePipeline
+		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(ok))

@@ -29,24 +29,24 @@ type RequestChannel struct {
 }
 
 var (
-	RequestsPipeline = make(chan RequestChannel) // pipe data/func to store actions
-	ResponsePipeline = make(chan StoreResult)    // pipe data from store actions
+	RequestsChan = make(chan RequestChannel) // pipe data/func to store actions
+	ResponseChan = make(chan StoreResult)    // pipe data from store actions
 )
 
 func actorHandler(handler actorRunner) {
 	var request RequestChannel
 	request.runner = handler
-	request.responseChannel = &ResponsePipeline
-	RequestsPipeline <- request
-	fmt.Println("Actor pushed results to request pipeline channel")
+	request.responseChannel = &ResponseChan
+	RequestsChan <- request
+	fmt.Println("Actor pushed results to request channel")
 }
 
 func Actor() {
-	fmt.Printf("Actor started with channel size of %d\n", cap(RequestsPipeline))
-	for req := range RequestsPipeline {
+	fmt.Printf("Actor started with channel size of %d\n", cap(RequestsChan))
+	for req := range RequestsChan {
 		result := req.runner()
 		*req.responseChannel <- result
-		fmt.Println("Actor pushed results to response pipeline channel")
+		fmt.Println("Actor pushed results to response channel")
 	}
 }
 

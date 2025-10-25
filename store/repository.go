@@ -26,10 +26,11 @@ func IsOpen() bool {
 	return (sessionDatabase != nil)
 }
 
-func Commit(ctx context.Context) {
+func Commit(ctx context.Context) error {
 	if IsOpen() {
-		SaveSession(ctx, datastoreFile)
+		return SaveSession(ctx, datastoreFile)
 	}
+	return nil
 }
 
 func OpenSession(ctx context.Context, storageFile string) error {
