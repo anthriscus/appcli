@@ -95,17 +95,13 @@ func Create(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
-		actorHandler(apiCreate(StoreRequest{writer: w, request: r, todoListItem: item}))
+		actorHandler(apiCreate(StoreRequest{ctx: r.Context(), todoListItem: item}))
 		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))
-			// if newItem, ok := store.Create(r.Context(), item); ok != nil {
-			// w.WriteHeader(http.StatusBadRequest)
-			// json.NewEncoder(w).Encode(jsonError(ok))
 		} else {
 			w.WriteHeader((http.StatusCreated))
-			// if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
 			if ok := json.NewEncoder(w).Encode(&result.todoListItem); ok != nil {
 				logging.Log().ErrorContext(r.Context(), "Create", "error", ok)
 			}
@@ -123,22 +119,11 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		findData := store.TodoListItem{Line: id}
-		actorHandler(apiGetListByIndex(StoreRequest{writer: w, request: r, todoListItem: findData}))
+		actorHandler(apiGetListByIndex(StoreRequest{ctx: r.Context(), todoListItem: findData}))
 		result := <-ResponseChan
-		// if item, ok := store.GetByIndex(id); ok != nil {
-		// 	w.WriteHeader(http.StatusBadRequest)
-		// 	json.NewEncoder(w).Encode(jsonError(ok))
-		// 	return
-		// } else {
-		// 	if ok := json.NewEncoder(w).Encode(&item); ok != nil {
-		// 		logging.Log().ErrorContext(r.Context(), "GetByIndex", "error", ok)
-		// 		return
-		// 	}
-		// }
-		//
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(result.err))
 			return
 		} else {
 			if ok := json.NewEncoder(w).Encode(&result.todoListItem); ok != nil {
@@ -153,16 +138,6 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 func GetList(w http.ResponseWriter, r *http.Request) {
 	actorHandler(apiGetList())
 	result := <-ResponseChan
-	// if items, ok := store.GetList(); ok != nil {
-	// 	w.WriteHeader(http.StatusBadRequest)
-	// 	json.NewEncoder(w).Encode(jsonError(ok))
-	// 	return
-	// } else {
-	// 	if ok := json.NewEncoder(w).Encode(&items); ok != nil {
-	// 		logging.Log().ErrorContext(r.Context(), "GetList", "error", ok)
-	// 		return
-	// 	}
-	// }
 	if result.err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(jsonError(result.err))
@@ -182,19 +157,11 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
-		// if newItem, ok := store.Update(r.Context(), item); ok != nil {
-		// 	w.WriteHeader(http.StatusBadRequest)
-		// 	json.NewEncoder(w).Encode(jsonError(ok))
-		// } else {
-		// 	if ok := json.NewEncoder(w).Encode(&newItem); ok != nil {
-		// 		logging.Log().ErrorContext(r.Context(), "UpdateTask", "error", ok)
-		// 	}
-		// }
-		actorHandler(apiUpdate(StoreRequest{writer: w, request: r, todoListItem: item}))
+		actorHandler(apiUpdate(StoreRequest{ctx: r.Context(), todoListItem: item}))
 		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(result.err))
 		} else {
 			if ok := json.NewEncoder(w).Encode(&result.todoListItem); ok != nil {
 				logging.Log().ErrorContext(r.Context(), "UpdateTask", "error", ok)
@@ -210,19 +177,12 @@ func Delete(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("bad taskid")))
 		return
 	} else {
-		// if ok := store.Delete(r.Context(), id); ok != nil {
-		// 	w.WriteHeader(http.StatusBadRequest)
-		// 	json.NewEncoder(w).Encode(jsonError(ok))
-		// } else {
-		// 	w.WriteHeader(http.StatusNoContent)
-		// 	return
-		// }
 		deleteData := store.TodoListItem{Line: id}
-		actorHandler(apiDelete(StoreRequest{writer: w, request: r, todoListItem: deleteData}))
+		actorHandler(apiDelete(StoreRequest{ctx: r.Context(), todoListItem: deleteData}))
 		result := <-ResponseChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(jsonError(ok))
+			json.NewEncoder(w).Encode(jsonError(result.err))
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 			return

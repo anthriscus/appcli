@@ -17,7 +17,11 @@ func GetByIndex(taskId int) (TodoListItem, error) {
 
 // list items
 func GetList() (TodoListItems, error) {
-	return sessionDatabase, nil
+	items := TodoListItems{}
+	for id, v := range sessionDatabase {
+		items[id] = v
+	}
+	return items, nil
 }
 
 func Create(ctx context.Context, candidate TodoListItem) (TodoListItem, error) {

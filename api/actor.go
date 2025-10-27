@@ -1,15 +1,14 @@
 package api
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/anthriscus/appcli/store"
 )
 
 type StoreRequest struct {
-	writer       http.ResponseWriter // needed ? may be expand the go func to write to it/ finish the request
-	request      *http.Request
+	ctx          context.Context
 	todoListItem store.TodoListItem
 }
 
@@ -20,22 +19,22 @@ type StoreResult struct {
 }
 
 // runs something and gets a result
-type actorRunner func() StoreResult
+type actorCommand func() StoreResult
 
-// receives a runner and channel to write the result back to
+// receives a command and channel to write the result back to
 type RequestChannel struct {
-	runner          actorRunner
+	command         actorCommand
 	responseChannel *chan StoreResult // where we want the results to be piped back to
 }
 
 var (
-	RequestsChan = make(chan RequestChannel) // pipe data/func to store actions
-	ResponseChan = make(chan StoreResult)    // pipe data from store actions
+	RequestsChan = make(chan RequestChannel) // channel for commands that call store actions
+	ResponseChan = make(chan StoreResult)    // channel for returning result from store actions
 )
 
-func actorHandler(handler actorRunner) {
+func actorHandler(handler actorCommand) {
 	var request RequestChannel
-	request.runner = handler
+	request.command = handler
 	request.responseChannel = &ResponseChan
 	RequestsChan <- request
 	fmt.Println("Actor pushed results to request channel")
@@ -44,15 +43,17 @@ func actorHandler(handler actorRunner) {
 func Actor() {
 	fmt.Printf("Actor started with channel size of %d\n", cap(RequestsChan))
 	for req := range RequestsChan {
-		result := req.runner()
+		// run the store command retrieved from the channel
+		result := req.command()
+		// return the result of the command in the returning channel
 		*req.responseChannel <- result
 		fmt.Println("Actor pushed results to response channel")
 	}
 }
 
-var apiCreate = func(storeRequest StoreRequest) actorRunner {
+var apiCreate = func(storeRequest StoreRequest) actorCommand {
 	return func() StoreResult {
-		newItem, ok := store.Create(storeRequest.request.Context(), storeRequest.todoListItem)
+		newItem, ok := store.Create(storeRequest.ctx, storeRequest.todoListItem)
 		return StoreResult{
 			todoListItem:  newItem,
 			err:           ok,
@@ -61,9 +62,9 @@ var apiCreate = func(storeRequest StoreRequest) actorRunner {
 	}
 }
 
-var apiUpdate = func(storeRequest StoreRequest) actorRunner {
+var apiUpdate = func(storeRequest StoreRequest) actorCommand {
 	return func() StoreResult {
-		newItem, ok := store.Update(storeRequest.request.Context(), storeRequest.todoListItem)
+		newItem, ok := store.Update(storeRequest.ctx, storeRequest.todoListItem)
 		return StoreResult{
 			todoListItem: newItem,
 			err:          ok,
@@ -71,9 +72,9 @@ var apiUpdate = func(storeRequest StoreRequest) actorRunner {
 	}
 }
 
-var apiDelete = func(storeRequest StoreRequest) actorRunner {
+var apiDelete = func(storeRequest StoreRequest) actorCommand {
 	return func() StoreResult {
-		ok := store.Delete(storeRequest.request.Context(), storeRequest.todoListItem.Line)
+		ok := store.Delete(storeRequest.ctx, storeRequest.todoListItem.Line)
 		return StoreResult{
 			todoListItem: store.TodoListItem{},
 			err:          ok,
@@ -81,7 +82,7 @@ var apiDelete = func(storeRequest StoreRequest) actorRunner {
 	}
 }
 
-var apiGetList = func() actorRunner {
+var apiGetList = func() actorCommand {
 	return func() StoreResult {
 		items, ok := store.GetList()
 		return StoreResult{
@@ -92,7 +93,7 @@ var apiGetList = func() actorRunner {
 	}
 }
 
-var apiGetListByIndex = func(storeRequest StoreRequest) actorRunner {
+var apiGetListByIndex = func(storeRequest StoreRequest) actorCommand {
 	return func() StoreResult {
 		item, ok := store.GetByIndex(storeRequest.todoListItem.Line)
 		return StoreResult{
