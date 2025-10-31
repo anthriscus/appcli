@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/anthriscus/appcli/logging"
@@ -24,48 +26,74 @@ var StatusName = map[int]string{
 	StateCompleted:  "Completed",
 }
 
+// note point on unique keys in
+// https://go.dev/ref/spec#Composite_literals
+// https://go.dev/ref/spec#Order_of_evaluation
+
 type TodoListItem struct {
-	Line        int       `json:"line"` // tags just to show understanding of useage for flipping case in the file.
+	Line        int64     `json:"line"` // tags just to show understanding of useage for flipping case in the file.
 	Description string    `json:"description"`
 	State       int       `json:"state"`
 	Created     time.Time `json:"created"`
-	Id          string    `json:"id"`
+	Id          int64     `json:"id"`
 }
 
-type TodoListItems map[int]TodoListItem
+type TodoListItems map[int64]TodoListItem
+
+var storeActor *StoreChannels
 
 // more unique (ish) id perhaps
 // todo consider using https://github.com/google/uuid
-func GenerateId() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+// note point on unique keys in
+// https://go.dev/ref/spec#Composite_literals
+// https://go.dev/ref/spec#Order_of_evaluation
+
+func GenerateId() int64 {
+	// return fmt.Sprintf("%d", time.Now().UnixNano())
+	// need uuid not a int64 but that means refactor of where we use the line/id
+	// added a rand otherwise multi runners will get the same int64 id
+	// but all this is just a demo/mock app to learn stuff. sometimes our under load testing is generating same key for items.
+	t := time.Now().UnixNano() + rand.Int63n(10000)
+	atomic.AddInt64(&t, 1)
+	return t
 }
 
-func AddTask(ctx context.Context, newItem string) (int, error) {
+func StartActor(ctx context.Context) {
+	storeActor = NewStoreChannels(ctx)
+}
+
+func AddTask(ctx context.Context, newItem string) (int64, error) {
 
 	if !isDescription(newItem) {
 		return 0, errors.New("description cannot be empty")
 	}
-	itemKeys := collectKeys(sessionDatabase)
-	nextKey := highestKey(itemKeys) + 1
-	item := newTodoListItem(newItem, StateNotStarted, nextKey)
-	sessionDatabase[nextKey] = item
+	// itemKeys := collectKeys(sessionDatabase)
+	// nextKey := highestKey(itemKeys) + 1
+	// cannot use next key because multiple go routines were ending up with same line no/next key.
+	// just using the psuedo random int64 number for now. to avoid changing all the code for ids to uuid at this point.
+	// So needs refactor !
+	item := newTodoListItem(newItem, StateNotStarted)
+	// sessionDatabase[nextKey] = item
+	record := TodoListRecord{item: item}
+	storeActor.Write(record)
 
-	logging.Log().InfoContext(ctx, "Added item", "ID", nextKey, "description", newItem)
-	return nextKey, nil
+	logging.Log().InfoContext(ctx, "Added item", "ID", item.Id, "description", newItem)
+	return item.Id, nil
 }
 
-func newTodoListItem(description string, state int, line int) TodoListItem {
+func newTodoListItem(description string, state int) TodoListItem {
+	newId := GenerateId()
 	item := TodoListItem{
-		Id:          GenerateId(),
+		Id:          newId,
 		Description: description,
 		State:       state,
 		Created:     time.Now().UTC(),
-		Line:        line,
+		Line:        newId,
 	}
 	return item
 }
 
-func DescriptionChange(ctx context.Context, index int, newDescription string) error {
+func DescriptionChange(ctx context.Context, index int64, newDescription string) error {
 	if len(sessionDatabase) > 0 {
 		if !isDescription(newDescription) {
 			return errors.New("description cannot be empty")
@@ -85,7 +113,7 @@ func DescriptionChange(ctx context.Context, index int, newDescription string) er
 }
 
 // change the state
-func StateChange(ctx context.Context, index int, state int) error {
+func StateChange(ctx context.Context, index int64, state int) error {
 	if len(sessionDatabase) > 0 {
 		if !isState(state) {
 			return errors.New("state is out of range")
@@ -112,14 +140,20 @@ func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 	} else if !isState(item.State) {
 		return TodoListItem{}, errors.New("state is out of range")
 	}
-	if current, ok := sessionDatabase[item.Line]; !ok {
+	//if current, ok := sessionDatabase[item.Line]; !ok {
+	record := storeActor.Read(item.Line)
+	ok := record.ok
+	current := record.item
+	if !ok {
 		empty := TodoListItem{}
 		return empty, fmt.Errorf("error: %s", "item not found")
 	} else {
 		// only update the task and description
 		current.Description = item.Description
 		current.State = item.State
-		sessionDatabase[item.Line] = current
+		// sessionDatabase[item.Line] = current
+		record := TodoListRecord{item: current}
+		storeActor.Write(record)
 		index := item.Line
 		after := item.Description
 		logging.Log().InfoContext(ctx, "Updated item", "ID", index, "description", after)
@@ -128,7 +162,7 @@ func UpdateTask(ctx context.Context, item TodoListItem) (TodoListItem, error) {
 }
 
 // delete a task
-func DeleteTask(ctx context.Context, index int) error {
+func DeleteTask(ctx context.Context, index int64) error {
 	if len(sessionDatabase) > 0 {
 		if record, ok := sessionDatabase[index]; !ok {
 			return errors.New("item not found")
@@ -145,7 +179,7 @@ func DeleteTask(ctx context.Context, index int) error {
 }
 
 // task list report
-func ListTask(index int) {
+func ListTask(index int64) {
 	fmt.Printf("\nList length:%d\n", len(sessionDatabase))
 
 	listTaskHeader()
@@ -172,8 +206,8 @@ func listTaskLine(listItem TodoListItem) {
 }
 
 // fetch the number keys from the map
-func collectKeys(data TodoListItems) []int {
-	keys := make([]int, 0, len(data))
+func collectKeys(data TodoListItems) []int64 {
+	keys := make([]int64, 0, len(data))
 	for i := range data {
 		keys = append(keys, i)
 	}

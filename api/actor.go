@@ -32,10 +32,10 @@ var (
 	ResponseChan = make(chan StoreResult)    // channel for returning result from store actions
 )
 
-func actorHandler(handler actorCommand) {
+func actorHandler(handler actorCommand, respChan chan StoreResult) {
 	var request RequestChannel
 	request.command = handler
-	request.responseChannel = &ResponseChan
+	request.responseChannel = &respChan
 	RequestsChan <- request
 	fmt.Println("Actor pushed results to request channel")
 }
@@ -43,11 +43,12 @@ func actorHandler(handler actorCommand) {
 func Actor() {
 	fmt.Printf("Actor started with channel size of %d\n", cap(RequestsChan))
 	for req := range RequestsChan {
-		// run the store command retrieved from the channel
-		result := req.command()
-		// return the result of the command in the returning channel
-		*req.responseChannel <- result
-		fmt.Println("Actor pushed results to response channel")
+		go func() {
+			result := req.command()
+			// return the result of the command in the returning channel
+			*req.responseChannel <- result
+			fmt.Println("Actor pushed results to response channel")
+		}()
 	}
 }
 

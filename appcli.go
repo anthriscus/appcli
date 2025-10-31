@@ -33,11 +33,11 @@ var runMode runmode
 func main() {
 	// input flags
 	var flagAdd = flag.String("add", "", "add todolist item (\"description\")")
-	var flagUpdate = flag.Int("update", 0, "update task item description (id -description \"new description\")")
-	var flagNotStart = flag.Int("notstart", 0, "set task item id number to not started ( id )")
-	var flagStart = flag.Int("start", 0, "start a task item ( id )")
-	var flagComplete = flag.Int("complete", 0, "complete a task item id ( id )")
-	var flagDelete = flag.Int("delete", 0, "delete a task item id number ( id )")
+	var flagUpdate = flag.Int64("update", 0, "update task item description (id -description \"new description\")")
+	var flagNotStart = flag.Int64("notstart", 0, "set task item id number to not started ( id )")
+	var flagStart = flag.Int64("start", 0, "start a task item ( id )")
+	var flagComplete = flag.Int64("complete", 0, "complete a task item id ( id )")
+	var flagDelete = flag.Int64("delete", 0, "delete a task item id number ( id )")
 	var flagList = flag.Bool("list", false, "list items in the todolist item ( with additional optional -taskid num to show one item)")
 	var flagRunServer = flag.Bool("runserver", false, "run todolist as http server")
 
@@ -52,9 +52,10 @@ func main() {
 		return nil
 	})
 	// additional flag for list filter
-	var taskId int
+	var taskId int64
 	flag.Func("taskid", "optional, use this -taskid with -list for one task", func(s string) error {
-		if i, ok := strconv.Atoi(s); ok != nil {
+		if i, ok := strconv.ParseInt(s, 10, 64); ok != nil {
+			// if i, ok := strconv.Atoi(s); ok != nil {
 			return errors.New("value of taskid needs to be supplied")
 		} else {
 			taskId = i
@@ -65,11 +66,16 @@ func main() {
 	// // grab the flag input state from command line
 	flag.Parse()
 
-	runMode = runmode(RunModeCLI)
+	if *flagRunServer {
+		runMode = runmode(RunModeServer)
+	} else {
+		runMode = runmode(RunModeCLI)
+	}
 
 	// but TODO "github.com/google/uuid" will provide a better one
 	id := store.GenerateId()
-	ctx := context.WithValue(context.Background(), appcontext.TraceIdKey, id)
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), appcontext.TraceIdKey, id))
+	defer cancel()
 
 	// resolve the appdata data sub folder
 	dir, err := filer.CreateAppDataFolder(dataStorageFolderName)
@@ -96,6 +102,8 @@ func main() {
 		// fatal database is unavailable
 		return
 	}
+	// start the store actor for map
+	store.StartActor(ctx)
 
 	// process the flags
 	switch {

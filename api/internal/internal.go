@@ -25,7 +25,7 @@ func randomString(length int) string {
 	return string(result)
 }
 
-func GenerateDummyTasks(size int) store.TodoListItems {
+func GenerateDummyTasks(size int64) store.TodoListItems {
 	items := store.TodoListItems{}
 	for i := range size {
 		items[i] = dummyTaskItem()

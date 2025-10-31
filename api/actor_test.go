@@ -21,14 +21,19 @@ func TestMain(m *testing.M) {
 	logging.Default()
 	// load the sample todolists into memory
 	dataFile, _ := filepath.Abs("../testdata/todolist.500.json")
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	store.OpenSession(ctx, dataFile)
+	store.StartActor(ctx)
 
 	// startup the api actor to open the channels
 	go func() {
 		Actor()
 	}()
 	m.Run()
+	testDataResults := "C:\\Users\\piers.kenyon\\AppData\\Local\\appcli\\testsresults.json"
+	store.SaveSession(ctx, testDataResults)
 }
 
 // here we mock the server call
@@ -69,7 +74,9 @@ func TestGetList(t *testing.T) {
 func TestAdd(t *testing.T) {
 	apiCreate := "/create"
 	numClients := 100
-	results := make(chan string, numClients)
+	dummyTasks := internal.GenerateDummyTasks(1)
+	dummyTask := dummyTasks[0]
+
 	t.Parallel()
 
 	var wg sync.WaitGroup
@@ -77,12 +84,9 @@ func TestAdd(t *testing.T) {
 		wg.Add(1)
 		go func(clientId int) {
 			defer wg.Done()
-
-			candidates := internal.GenerateDummyTasks(1)
-			candidate := candidates[0]
-			// add info for id in description
-			candidate.Description = fmt.Sprintf("client %d ,%x", clientId, candidate.Description)
-			jsonData, _ := encodeJsonBodyItem(candidate)
+			dummy := dummyTask
+			dummy.Description = fmt.Sprintf("%d %s", clientId, dummy.Description)
+			jsonData, _ := encodeJsonBodyItem(dummy)
 			payload := bytes.NewBuffer(jsonData)
 			req := httptest.NewRequest(http.MethodPost, apiCreate, payload)
 			w := httptest.NewRecorder()
@@ -96,29 +100,28 @@ func TestAdd(t *testing.T) {
 			}
 			createdTodo := decodeJsonRecorderBodyItem(w.Body.Bytes())
 			// assert fields here
-			if createdTodo.Description != candidate.Description {
-				t.Error("create failed, expected descriptions to match")
+			// t.Logf("clientID [%d] created: [%d] [%s]\n", clientId, createdTodo.Line, createdTodo.Description)
+			// t.Logf("clientID [%d] created: [%s] expected [%s]\n", clientId, createdTodo.Description, dummy.Description)
+			if createdTodo.Description != dummy.Description {
+				t.Errorf("create failed, unmatched descriptions, created: [%s] expected [%s]\n", createdTodo.Description, dummy.Description)
 			}
-			// push these to results chan
-			results <- fmt.Sprintf("clientID %d, created new task item with line id:%d", clientId, createdTodo.Line)
 		}(i)
 	}
 	// wait for all client runs to end
 	wg.Wait()
-	close(results)
-	t.Logf("Adding tasks. Found %d items in Client results", len(results))
-	for result := range results {
-		t.Log(result)
-	}
 }
 
 // update the same line numbers 1..100 with different runnning client ids
 func TestUpdate(t *testing.T) {
-	apiCreate := "/update"
-
-	lineNumbers := 100
+	var tests = []int64{
+		1761837306757785900, 1761837307002502800, 1761837307237967100, 1761837307466795800, 1761837307696710300,
+		1761837307919608500, 1761837308134837300, 1761837308377729900, 1761837308603689600, 1761837308840513600,
+	}
+	dummyTasks := internal.GenerateDummyTasks(1)
+	dummyTask := dummyTasks[0]
+	lineNumbers := len(tests)
 	numClients := 10
-	results := make(chan string, numClients*lineNumbers)
+	apiCreate := "/update"
 
 	t.Parallel()
 
@@ -129,42 +132,30 @@ func TestUpdate(t *testing.T) {
 		go func(clientId int) {
 			defer wg.Done()
 			for j := range lineNumbers {
-				lineNumber := j + 1
-				candidates := internal.GenerateDummyTasks(1)
-				candidate := candidates[0]
-				// add info for id in description
-				candidate.Description = fmt.Sprintf("line %d ,%x", lineNumber, candidate.Description)
-				// the line that we are updating
-				candidate.Line = lineNumber
-				jsonData, _ := encodeJsonBodyItem(candidate)
+				dummy := dummyTask
+				dummy.Line = tests[j]
+				jsonData, _ := encodeJsonBodyItem(dummy)
 				payload := bytes.NewBuffer(jsonData)
 				req := httptest.NewRequest(http.MethodPut, apiCreate, payload)
 				w := httptest.NewRecorder()
-				t.Logf("running update task for Client:%d, line number %d", clientId, lineNumber)
+				t.Logf("running update task for Client:%d, %d", clientId, dummy.Line)
 				UpdateTask(w, req)
 
 				if w.Result().StatusCode != http.StatusOK {
-					t.Errorf("client id %d Line %d, update failed, wanted: %d got:%d", clientId, lineNumber, http.StatusOK, w.Result().StatusCode)
+					t.Errorf("client id %d %d, wanted: %d got:%d", clientId, dummy.Line, http.StatusOK, w.Result().StatusCode)
 				} else if w.Body == nil {
 					t.Error("update failed, bad body returned")
 				}
-				createdTodo := decodeJsonRecorderBodyItem(w.Body.Bytes())
+				updatedTask := decodeJsonRecorderBodyItem(w.Body.Bytes())
 				// assert fields here
-				if createdTodo.Description != candidate.Description {
+				if updatedTask.Description != dummy.Description {
 					t.Error("update failed, expected descriptions to match")
 				}
-				// push these to results chan
-				results <- fmt.Sprintf("Client id %d Line %d, updated task item with line id:%d", clientId, lineNumber, createdTodo.Line)
 			}
 		}(i)
 	}
 	// wait for all client runs to end
 	wg.Wait()
-	close(results)
-	t.Logf("Adding tasks. Found %d items in Client results", len(results))
-	for result := range results {
-		t.Log(result)
-	}
 }
 
 func encodeJsonBodyItem(todoItem store.TodoListItem) ([]byte, error) {
@@ -194,17 +185,3 @@ func decodeJsonRecorderBodyItem(body []byte) store.TodoListItem {
 		return todoItem
 	}
 }
-
-// func decodeJsonBodyItem(resp *http.Response) store.TodoListItem {
-// 	var todoItem store.TodoListItem
-
-// 	if bytes, ok := io.ReadAll(resp.Body); ok != nil {
-// 		return store.TodoListItem{}
-// 	} else {
-// 		if ok := json.Unmarshal(bytes, &todoItem); ok != nil {
-// 			return store.TodoListItem{}
-// 		} else {
-// 			return todoItem
-// 		}
-// 	}
-// }

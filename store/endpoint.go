@@ -6,7 +6,7 @@ import (
 )
 
 // get by taskid
-func GetByIndex(taskId int) (TodoListItem, error) {
+func GetByIndex(taskId int64) (TodoListItem, error) {
 	if item, ok := sessionDatabase[taskId]; !ok {
 		empty := TodoListItem{}
 		return empty, fmt.Errorf("item not found")
@@ -18,8 +18,12 @@ func GetByIndex(taskId int) (TodoListItem, error) {
 // list items
 func GetList() (TodoListItems, error) {
 	items := TodoListItems{}
-	for id, v := range sessionDatabase {
-		items[id] = v
+	keys := storeActor.Keys()
+	for _, v := range keys {
+		record := storeActor.Read(v)
+		if record.ok {
+			items[v] = record.item
+		}
 	}
 	return items, nil
 }
@@ -28,24 +32,26 @@ func Create(ctx context.Context, candidate TodoListItem) (TodoListItem, error) {
 	if taskId, ok := AddTask(ctx, candidate.Description); ok != nil {
 		empty := TodoListItem{}
 		return empty, fmt.Errorf("not added")
-	} else if current, ok := sessionDatabase[taskId]; !ok {
+	} else {
+		record := storeActor.Read(taskId)
+		if record.ok {
+			return record.item, nil
+		}
 		empty := TodoListItem{}
 		return empty, fmt.Errorf("not added")
-	} else {
-		return current, nil
 	}
 }
 
 func Update(ctx context.Context, item TodoListItem) (TodoListItem, error) {
-	if _, ok := sessionDatabase[item.Line]; !ok {
-		empty := TodoListItem{}
-		return empty, fmt.Errorf("item not found")
-	} else {
+	record := storeActor.Read(item.Line)
+	if record.ok {
 		return UpdateTask(ctx, item)
 	}
+	empty := TodoListItem{}
+	return empty, fmt.Errorf("item not found")
 }
 
-func Delete(ctx context.Context, taskId int) error {
+func Delete(ctx context.Context, taskId int64) error {
 	if ok := DeleteTask(ctx, taskId); ok != nil {
 		return ok
 	} else {

@@ -95,8 +95,9 @@ func Create(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
-		actorHandler(apiCreate(StoreRequest{ctx: r.Context(), todoListItem: item}))
-		result := <-ResponseChan
+		resultsChan := make(chan StoreResult)
+		actorHandler(apiCreate(StoreRequest{ctx: r.Context(), todoListItem: item}), resultsChan)
+		result := <-resultsChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))
@@ -113,14 +114,15 @@ func Create(w http.ResponseWriter, r *http.Request) {
 func GetByIndex(w http.ResponseWriter, r *http.Request) {
 	//
 	taskId := r.PathValue("taskId")
-	if id, ok := strconv.Atoi(taskId); ok != nil {
+	if id, ok := strconv.ParseInt(taskId, 10, 64); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(jsonError(ok))
 		return
 	} else {
 		findData := store.TodoListItem{Line: id}
-		actorHandler(apiGetListByIndex(StoreRequest{ctx: r.Context(), todoListItem: findData}))
-		result := <-ResponseChan
+		resultsChan := make(chan StoreResult)
+		actorHandler(apiGetListByIndex(StoreRequest{ctx: r.Context(), todoListItem: findData}), resultsChan)
+		result := <-resultsChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))
@@ -131,13 +133,14 @@ func GetByIndex(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		//
 	}
 }
 
 func GetList(w http.ResponseWriter, r *http.Request) {
-	actorHandler(apiGetList())
-	result := <-ResponseChan
+	resultsChan := make(chan StoreResult)
+	actorHandler(apiGetList(), resultsChan)
+
+	result := <-resultsChan
 	if result.err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(jsonError(result.err))
@@ -157,8 +160,9 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("invalid json")))
 		return
 	} else {
-		actorHandler(apiUpdate(StoreRequest{ctx: r.Context(), todoListItem: item}))
-		result := <-ResponseChan
+		resultsChan := make(chan StoreResult)
+		actorHandler(apiUpdate(StoreRequest{ctx: r.Context(), todoListItem: item}), resultsChan)
+		result := <-resultsChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))
@@ -172,14 +176,15 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 
 func Delete(w http.ResponseWriter, r *http.Request) {
 	taskId := r.PathValue("taskId")
-	if id, ok := strconv.Atoi(taskId); ok != nil {
+	if id, ok := strconv.ParseInt(taskId, 10, 64); ok != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(jsonError(fmt.Errorf("bad taskid")))
 		return
 	} else {
 		deleteData := store.TodoListItem{Line: id}
-		actorHandler(apiDelete(StoreRequest{ctx: r.Context(), todoListItem: deleteData}))
-		result := <-ResponseChan
+		resultsChan := make(chan StoreResult)
+		actorHandler(apiDelete(StoreRequest{ctx: r.Context(), todoListItem: deleteData}), resultsChan)
+		result := <-resultsChan
 		if result.err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(jsonError(result.err))

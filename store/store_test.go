@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ func TestMain(m *testing.M) {
 	logging.Default()
 	logging.Log().Info("setup default logging to std.io for tests")
 	resetList()
+
 	m.Run()
 }
 
@@ -74,8 +74,10 @@ func TestAddTask(t *testing.T) {
 		{description: "",
 			want: false},
 	}
+	ctx := t.Context()
+	StartActor(ctx)
 	resetList()
-	ctx := context.Background()
+
 	for _, tc := range tests {
 		if r, ok := AddTask(ctx, tc.description); tc.want != (ok == nil) {
 			t.Errorf("not added %s\n", tc.description)
@@ -102,12 +104,14 @@ func TestDescriptionChange(t *testing.T) {
 			index:          2,
 			want:           false},
 	}
+	ctx := t.Context()
+	StartActor(ctx)
 	resetList()
-	ctx := context.Background()
+
 	for _, tc := range tests {
-		if _, ok := AddTask(ctx, tc.description); ok != nil {
+		if added, ok := AddTask(ctx, tc.description); ok != nil {
 			t.Errorf("item %d not added to for a change %s\n", tc.index, tc.description)
-		} else if ok := DescriptionChange(ctx, tc.index, tc.newDescription); tc.want != (ok == nil) {
+		} else if ok := DescriptionChange(ctx, added, tc.newDescription); tc.want != (ok == nil) {
 			t.Errorf("item %d not changd %s\n", tc.index, tc.newDescription)
 		}
 	}
@@ -122,7 +126,6 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        1,
-				Id:          "1",
 				Description: "Updated task description buy apples",
 				State:       1,
 				Created:     time.Now().UTC(),
@@ -131,7 +134,6 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        2,
-				Id:          "2",
 				Description: "", // bad description
 				State:       1,
 				Created:     time.Now().UTC(),
@@ -140,7 +142,6 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        3,
-				Id:          "3",
 				Description: "Updated task description buy apples",
 				State:       -1, // bad state
 				Created:     time.Now().UTC(),
@@ -149,7 +150,6 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        4,
-				Id:          "4",
 				Description: "Updated task description buy apples",
 				State:       1,
 				Created:     time.Now().UTC(),
@@ -158,7 +158,6 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        5,
-				Id:          "5",
 				Description: "Updated task description buy apples",
 				State:       2,
 				Created:     time.Now().UTC(),
@@ -167,19 +166,20 @@ func TestUpdateTask(t *testing.T) {
 		{description: "Original task description buy apples",
 			newItem: TodoListItem{
 				Line:        6,
-				Id:          "6",
 				Description: "Updated task description buy apples",
 				State:       3, // bad state
 				Created:     time.Now().UTC(),
 			},
 			want: false},
 	}
+	ctx := t.Context()
+	StartActor(ctx)
 	resetList()
-	ctx := context.Background()
+
 	for _, tc := range tests {
-		if _, ok := AddTask(ctx, tc.description); ok != nil {
+		if added, ok := AddTask(ctx, tc.description); ok != nil {
 			t.Errorf("item %d not added to for a test change %s\n", tc.newItem.Line, tc.description)
-		} else if _, ok := UpdateTask(ctx, tc.newItem); tc.want != (ok == nil) {
+		} else if _, ok := UpdateTask(ctx, TodoListItem{Line: added, Description: tc.newItem.Description, State: tc.newItem.State}); tc.want != (ok == nil) {
 			t.Errorf("item %d not changd %s\n", tc.newItem.Line, tc.newItem.Description)
 		}
 	}
@@ -188,7 +188,7 @@ func TestUpdateTask(t *testing.T) {
 func TestDeleteTask(t *testing.T) {
 	var tests = []struct {
 		description string
-		item        int
+		item        int64
 		addToList   bool
 		want        bool
 	}{
@@ -209,15 +209,16 @@ func TestDeleteTask(t *testing.T) {
 			addToList: false,
 			want:      false},
 	}
+	ctx := t.Context()
+	StartActor(ctx)
 
-	ctx := context.Background()
 	for _, tc := range tests {
 		switch {
 		case tc.addToList:
 			resetList()
-			if _, ok := AddTask(ctx, tc.description); ok != nil {
+			if added, ok := AddTask(ctx, tc.description); ok != nil {
 				t.Errorf("items %d not added for a delete test %s\n", tc.item, tc.description)
-			} else if ok := DeleteTask(ctx, tc.item); tc.want != (ok == nil) {
+			} else if ok := DeleteTask(ctx, added); tc.want != (ok == nil) {
 				t.Errorf("item %d not deleted %s\n", tc.item, tc.description)
 			}
 		case !tc.addToList:

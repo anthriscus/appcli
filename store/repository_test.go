@@ -39,7 +39,7 @@ func TestRestoreList(t *testing.T) {
 		json string
 		want bool
 	}{
-		{json: "{\"42\": {\"line\": 42,\"description\": \"Build awesome new app with Go\",\"state\": 1,\"created\": \"2025-10-10T01:00:00.0000000Z\",\"id\": \"1234\"} }",
+		{json: "{\"42\": {\"line\": 42,\"description\": \"Build awesome new app with Go\",\"state\": 1,\"created\": \"2025-10-10T01:00:00.0000000Z\",\"id\": 1234} }",
 			want: false},
 		{
 			json: "{}",
