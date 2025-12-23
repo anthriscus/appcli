@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 )
 
 func CreateAppDataFolder(applicationName string) (string, error) {
@@ -11,8 +12,8 @@ func CreateAppDataFolder(applicationName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir = dir + "\\" + applicationName
-	err = os.MkdirAll(dir, 0600)
+	dir = filepath.Join([]string{dir, applicationName}...)
+	err = os.MkdirAll(dir, 0755)
 	if err != nil {
 		return "", err
 	}

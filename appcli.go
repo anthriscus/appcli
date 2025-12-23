@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"strconv"
 
 	"github.com/anthriscus/appcli/api"
@@ -86,7 +87,7 @@ func main() {
 	}
 
 	// wire up logger
-	logName := dir + "\\" + logFileName
+	logName := filepath.Join([]string{dir, logFileName}...)
 	if logFileHandle, err := filer.OpenLogFile(logName); err == nil {
 		defer logFileHandle.Close()
 		logOptions := logging.LoggerOptions()
@@ -95,7 +96,7 @@ func main() {
 	}
 
 	// init / pickup current list before process command
-	storageFile := fmt.Sprintf("%s\\%s", dir, dataFileName)
+	storageFile := filepath.Join([]string{dir, dataFileName}...)
 	// open the database for cli and api
 	openErr := store.OpenSession(ctx, storageFile)
 	if openErr != nil {
